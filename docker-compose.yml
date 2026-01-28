@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  seurat-shiny:
+    build: .
+    ports:
+      - "3838:3838"
+    volumes:
+      # Mount a directory for uploading Seurat objects
+      - ./data:/data
+    environment:
+      - SHINY_LOG_LEVEL=INFO
+    restart: unless-stopped
