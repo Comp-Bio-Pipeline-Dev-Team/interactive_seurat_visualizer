@@ -93,7 +93,10 @@ ui <- navbarPage(
   sidebarLayout(
     sidebarPanel(
       width = 3,
-      fileInput("seurat_file", "Upload Seurat (.rds)", accept = c(".rds")),
+      fileInput("seurat_file", "Upload Seurat (.rds or .h5ad)", accept = c(".rds", ".h5ad")),
+      radioButtons("ensembl_species", "Species", choices = c("Human", "Mouse"), inline = TRUE),
+      actionButton("convert_ensembl", "Convert Ensembl IDs to Symbols", icon = icon("dna"), class = "btn-info btn-block"),
+      br(),
       
       # JavaScript to highlight active plot and switch tabs
       tags$script(HTML("
@@ -289,11 +292,190 @@ server <- function(input, output, session) {
   observeEvent(input$seurat_file, {
     req(input$seurat_file)
     tryCatch({
-      obj <- readRDS(input$seurat_file$datapath)
+      path <- input$seurat_file$datapath
+      ext <- tolower(tools::file_ext(input$seurat_file$name))
+      
+      obj <- NULL
+      if (ext == "rds") {
+        obj <- readRDS(path)
+      } else if (ext == "h5ad") {
+        # Strategy 1: SeuratDisk (Fast, but fragile)
+        if (requireNamespace("SeuratDisk", quietly = TRUE)) {
+          showNotification("Attempting conversion with SeuratDisk...", type="message", duration=5)
+          dest <- paste0(path, ".h5seurat")
+          tryCatch({
+            SeuratDisk::Convert(path, dest = dest, overwrite = TRUE)
+            obj <- SeuratDisk::LoadH5Seurat(dest)
+          }, error = function(e) {
+            showNotification(paste("SeuratDisk failed:", e$message, "Trying fallback..."), type="warning")
+            obj <<- NULL # Signal failure to fallback
+          }, finally = {
+            if(file.exists(dest)) unlink(dest)
+          })
+        }
+        
+        # Strategy 2: Zellkonverter (Robust, but requires Python env setup)
+        if (is.null(obj)) {
+          if (requireNamespace("zellkonverter", quietly = TRUE) && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+            showNotification("Attempting conversion with zellkonverter (this may take a while first time)...", type="message", duration=10)
+            tryCatch({
+              sce <- zellkonverter::readH5AD(path)
+              obj <- as.Seurat(sce, counts = "X", data = "X")
+            }, error = function(e) {
+              stop(paste("All loading methods failed. Zellkonverter error:", e$message))
+            })
+          } else {
+            stop("SeuratDisk failed and zellkonverter is not installed for fallback.")
+          }
+        }
+      } else {
+        stop("Unsupported file extension")
+      }
+      
+      # --- Seurat Object Normalization ---
+      # Fix Assay Names (zellkonverter often uses 'originalexp')
+      if ("originalexp" %in% Assays(obj) && !"RNA" %in% Assays(obj)) {
+        obj <- RenameAssays(obj, originalexp = "RNA")
+      }
+      # If 'RNA' is still not default (e.g. it was 'Spatial' or something else), force it if 'RNA' exists
+      if ("RNA" %in% Assays(obj)) {
+        DefaultAssay(obj) <- "RNA"
+      }
+      
+      # Fix Reduction Names (zellkonverter often uses 'X_umap', 'X_pca')
+      for (red in names(obj@reductions)) {
+        if (red == "X_umap") {
+          obj@reductions$umap <- obj@reductions$X_umap
+          obj@reductions$X_umap <- NULL
+          Key(obj@reductions$umap) <- "umap_"
+        } else if (red == "X_pca") {
+          obj@reductions$pca <- obj@reductions$X_pca
+          obj@reductions$X_pca <- NULL
+          Key(obj@reductions$pca) <- "PC_"
+        } else if (red == "X_tsne") {
+          obj@reductions$tsne <- obj@reductions$X_tsne
+          obj@reductions$X_tsne <- NULL
+          Key(obj@reductions$tsne) <- "tSNE_"
+        }
+      }
+      # -----------------------------------
+      
       original_obj(obj)
       seurat_obj(obj)
       showNotification("Loaded successfully!", type="message", duration=3)
     }, error = function(e) showNotification(paste("Error:", e$message), type="error"))
+  })
+  
+  # --- Convert Ensembl IDs ---
+  observeEvent(input$convert_ensembl, {
+    req(seurat_obj())
+    
+    species <- input$ensembl_species
+    db_pkg <- if(species == "Human") "org.Hs.eg.db" else "org.Mm.eg.db"
+    
+    if (!requireNamespace(db_pkg, quietly = TRUE)) {
+      showNotification(paste(db_pkg, "is not installed."), type="error")
+      return()
+    }
+    if (!requireNamespace("AnnotationDbi", quietly = TRUE)) {
+      showNotification("AnnotationDbi is not installed.", type="error")
+      return()
+    }
+    
+    # Load the package dynamically
+    library(db_pkg, character.only = TRUE)
+    # Get the db object (usually named same as package)
+    org_db <- get(db_pkg)
+    
+    withProgress(message = "Converting IDs...", value = 0, {
+      tryCatch({
+        obj <- seurat_obj()
+        # Get current feature names
+        current_ids <- rownames(obj)
+        
+        # Map IDs
+        incProgress(0.2, detail = paste("Mapping", species, "Ensembl to Symbols"))
+        mapped_symbols <- AnnotationDbi::mapIds(
+          org_db,
+          keys = current_ids,
+          column = "SYMBOL",
+          keytype = "ENSEMBL",
+          multiVals = "first"
+        )
+        
+        # Identify features that successfully mapped
+        mapped_indices <- !is.na(mapped_symbols)
+        num_mapped <- sum(mapped_indices)
+        
+        if (num_mapped == 0) {
+          showNotification("No Ensembl IDs mapped to Symbols.", type="warning")
+          return()
+        }
+        
+        # Create new names vector: Use Symbol if mapped, else keep original ID
+        new_names <- current_ids
+        new_names[mapped_indices] <- mapped_symbols[mapped_indices]
+        
+        # Handle duplicates (e.g. distinct Ensembl IDs mapping to same Symbol)
+        # We make them unique by appending .1, .2 etc.
+        incProgress(0.5, detail = "Handling duplicates")
+        new_names <- make.unique(new_names)
+        
+        # Rename features in the object
+        # Since RenameGenesSeurat doesn't exist, we create a new assay with swapped counts
+        incProgress(0.7, detail = "Updating Seurat Object")
+        
+        # Get counts matrix
+        # Use LayerData if available (Seurat v5), or GetAssayData
+        counts_mat <- GetAssayData(obj, layer = "counts")
+        
+        # Rename rows
+        rownames(counts_mat) <- new_names
+        
+        # Create new assay
+        new_assay <- CreateAssayObject(counts = counts_mat)
+        
+        # Try to bring over 'data' layer if it exists and has same structure
+        if ("data" %in% Layers(obj, assay = DefaultAssay(obj))) {
+           data_mat <- GetAssayData(obj, layer = "data")
+           if (nrow(data_mat) == nrow(counts_mat)) {
+             rownames(data_mat) <- new_names
+             new_assay <- SetAssayData(new_assay, layer = "data", new.data = data_mat)
+           }
+        }
+        
+        # Replace the default assay (usually RNA) with our renamed version
+        # It's safer to replace the assay entirely to ensure consistency
+        assay_name <- DefaultAssay(obj)
+        obj[[assay_name]] <- new_assay
+        
+        # If there were reductions, they might still have old feature names in loadings
+        # For now we keep them but note that feature loadings might be mismatched.
+        # Ideally we'd rename rows of Loadings(obj, reduction) as well.
+        for (red in Reductions(obj)) {
+           loadings <- Loadings(obj, reduction = red)
+           if (!is.null(loadings) && nrow(loadings) == length(current_ids)) {
+             # Only rename if dimensions match exactly (meaning all features were used)
+             # Often PCA uses only variable features, so this might not match exactly.
+             # Safe skip for now or we could try matching names.
+           }
+        }
+        
+        seurat_obj(obj)
+        
+        # Force UI updates
+        # Ensure all feature dropdowns are updated with new symbols
+        all_features <- c(rownames(obj), colnames(obj@meta.data))
+        lapply(c("p1","p2","p3","p4"), function(id) {
+          updateSelectizeInput(session, paste0(id, "-feature"), choices=all_features, server = TRUE)
+        })
+        
+        showNotification(paste("Renamed", num_mapped, "features to Symbols!"), type="message")
+        
+      }, error = function(e) {
+        showNotification(paste("Conversion Error:", e$message), type="error")
+      })
+    })
   })
   
   # --- DE Reactive Values & Logic ---
@@ -651,16 +833,19 @@ server <- function(input, output, session) {
             )
           } else if (ptype == "ViolinPlot") {
             req(feat)
-            p <- SCpubr::do_ViolinPlot(
-              sample = obj,
-              features = feat,
-              group.by = grp,
-              split.by = splt,
-              split.plot = TRUE,
-              colors.use = colors,
-              font.size = font_size,
-              legend.position = legend_pos
-            )
+            p <- tryCatch({
+              SCpubr::do_ViolinPlot(
+                sample = obj,
+                features = feat,
+                group.by = grp,
+                split.by = splt,
+                colors.use = colors,
+                font.size = font_size,
+                legend.position = legend_pos
+              )
+            }, error = function(e) {
+              ggplot() + annotate("text", x=0, y=0, label=paste("SCpubr Violin Error:", e$message), size=4, color="red") + theme_void()
+            })
           } else if (ptype == "DotPlot") {
             req(feat)
             # DotPlot - support viridis palettes
@@ -703,6 +888,28 @@ server <- function(input, output, session) {
               )
             })
           }
+          
+          # Fix SCpubr Legend Orientation
+          if (!is.null(p)) {
+            leg_dir <- if (legend_pos %in% c("bottom", "top")) "horizontal" else "vertical"
+            
+            if (ptype == "FeaturePlot") {
+              p <- p + guides(
+                color = guide_colorbar(direction = leg_dir, title.position = "top", order = 1),
+                fill = guide_colorbar(direction = leg_dir, title.position = "top", order = 1)
+              )
+            } else if (ptype == "ViolinPlot") {
+              p <- p + guides(fill = guide_legend(direction = leg_dir, override.aes = list(size = 4), title.position = "top"))
+            } else if (ptype == "DimPlot") {
+              p <- p + guides(color = guide_legend(direction = leg_dir, override.aes = list(size = 4), title.position = "top"))
+            } else if (ptype == "DotPlot") {
+              p <- p + guides(
+                color = guide_colorbar(direction = leg_dir, title.position = "top", order = 1),
+                size = guide_legend(direction = leg_dir, title.position = "top", order = 2)
+              )
+            }
+          }
+          
         }, error = function(e) {
           # Fallback to standard if SCpubr fails
           p <<- ggplot() + annotate("text", x=0, y=0, label=paste("SCpubr error:", e$message), size=4, color="red") + theme_void()
@@ -803,7 +1010,7 @@ server <- function(input, output, session) {
       ptype <- input[[ns("plot_type")]]
       if (ptype %in% c("FeaturePlot","ViolinPlot","DotPlot")) {
         all_features <- c(rownames(seurat_obj()), colnames(seurat_obj()@meta.data))
-        updateSelectizeInput(session, ns("feature"), choices=all_features)
+        updateSelectizeInput(session, ns("feature"), choices=all_features, server = TRUE)
       }
     })
     
