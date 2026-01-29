@@ -15,11 +15,21 @@ install.packages(c(
   "RColorBrewer",
   "scales",
   "DT",
-  "ggrepel"
+  "ggrepel",
+  "msigdbr",  # MSigDB gene sets
+  "igraph"    # For network plots
 ))
 
 # Install Bioconductor packages
-BiocManager::install("UCell", update = FALSE)
+BiocManager::install(c(
+  "UCell",
+  "clusterProfiler",  # Pathway enrichment
+  "enrichplot",       # Enrichment visualization
+  "fgsea",            # Fast GSEA
+  "org.Hs.eg.db",     # Human annotations
+  "org.Mm.eg.db",     # Mouse annotations
+  "DOSE"              # Disease ontology
+), update = FALSE)
 
 # Install GitHub packages
 remotes::install_github("enblacar/SCpubr")

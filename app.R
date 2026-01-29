@@ -15,8 +15,18 @@ library(ggrepel)
 # Optional Libraries
 has_ucell <- requireNamespace("UCell", quietly = TRUE)
 has_scpubr <- requireNamespace("SCpubr", quietly = TRUE)
+has_enrichment <- requireNamespace("clusterProfiler", quietly = TRUE) && 
+                  requireNamespace("enrichplot", quietly = TRUE)
 if (has_ucell) library(UCell)
 if (has_scpubr) library(SCpubr)
+if (has_enrichment) {
+  library(clusterProfiler)
+  library(enrichplot)
+  library(fgsea)
+  library(msigdbr)
+  library(DOSE)
+  library(igraph)
+}
 
 options(shiny.maxRequestSize = 10000 * 1024^2)
 
@@ -208,9 +218,22 @@ ui <- navbarPage(
         hr(),
         numericInput("de_logfc", "LogFC Threshold", value = 0.25, min = 0, max = 5, step = 0.05),
         numericInput("de_minpct", "Min Pct", value = 0.1, min = 0, max = 1, step = 0.05),
+        numericInput("de_pval", "P-value Threshold", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
         selectInput("de_test", "Test Type", choices = c("wilcox", "t-test", "roc", "LR"), selected = "wilcox"),
         br(),
         actionButton("run_de", "Run Differential Expression", class="btn-primary btn-block"),
+        hr(),
+        h5("Volcano Plot Settings"),
+        sliderInput("volcano_pt_size", "Point Size", min = 0.5, max = 5, value = 2, step = 0.5),
+        sliderInput("volcano_alpha", "Point Transparency", min = 0.1, max = 1, value = 0.6, step = 0.1),
+        colourInput("volcano_sig_color", "Significant Color", value = "#E74C3C"),
+        colourInput("volcano_nonsig_color", "Non-significant Color", value = "#95A5A6"),
+        hr(),
+        h5("Export"),
+        selectInput("volcano_format", "Format", choices = c("png", "pdf", "jpg"), selected = "png"),
+        numericInput("volcano_width", "Width (inches)", value = 10, min = 4, max = 20),
+        numericInput("volcano_height", "Height (inches)", value = 8, min = 4, max = 20),
+        downloadButton("download_volcano", "Download Volcano Plot", class="btn-info btn-block"),
         hr(),
         downloadButton("download_de", "Download CSV", class="btn-success btn-block")
       ),
@@ -224,6 +247,89 @@ ui <- navbarPage(
           tabPanel("Volcano Plot", 
             br(),
             plotlyOutput("de_volcano", height = "600px")
+          )
+        )
+      )
+    )
+  ),
+  
+  tabPanel("Pathway Enrichment",
+    sidebarLayout(
+      sidebarPanel(
+        width = 3,
+        h4("Enrichment Analysis"),
+        
+        radioButtons("enrich_source", "Input Source",
+                     choices = c("From DE Results" = "de", "Custom Gene List" = "custom"),
+                     selected = "de"),
+        
+        conditionalPanel(
+          condition = "input.enrich_source == 'custom'",
+          textAreaInput("enrich_genes", "Gene List (one per line)", 
+                       rows = 5, placeholder = "CD3D\nCD4\nCD8A\n...")
+        ),
+        
+        hr(),
+        h5("Analysis Settings"),
+        
+        selectInput("enrich_type", "Analysis Type",
+                   choices = c("Over-Representation (ORA)" = "ora", 
+                              "Gene Set Enrichment (GSEA)" = "gsea"),
+                   selected = "ora"),
+        
+        selectInput("enrich_database", "Database",
+                   choices = c("MSigDB Hallmarks" = "hallmark",
+                              "GO Biological Process" = "go_bp",
+                              "GO Molecular Function" = "go_mf",
+                              "GO Cellular Component" = "go_cc",
+                              "KEGG" = "kegg",
+                              "Reactome" = "reactome"),
+                   selected = "hallmark"),
+        
+        selectInput("enrich_organism", "Organism",
+                   choices = c("Human" = "human", "Mouse" = "mouse"),
+                   selected = "human"),
+        
+        hr(),
+        h5("Parameters"),
+        
+        numericInput("enrich_pval", "P-value Cutoff", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
+        numericInput("enrich_qval", "Q-value Cutoff", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
+        numericInput("enrich_minsize", "Min Gene Set Size", value = 10, min = 5, max = 100),
+        numericInput("enrich_maxsize", "Max Gene Set Size", value = 500, min = 100, max = 2000),
+        
+        br(),
+        actionButton("run_enrichment", "Run Enrichment Analysis", class="btn-primary btn-block"),
+        
+        hr(),
+        h5("Export"),
+        downloadButton("download_enrichment", "Download Results (CSV)", class="btn-success btn-block")
+      ),
+      mainPanel(
+        width = 9,
+        tabsetPanel(
+          tabPanel("Results Table",
+            br(),
+            DT::DTOutput("enrichment_table")
+          ),
+          tabPanel("Dot Plot",
+            br(),
+            plotOutput("enrichment_dotplot", height = "600px")
+          ),
+          tabPanel("Bar Plot",
+            br(),
+            plotOutput("enrichment_barplot", height = "600px")
+          ),
+          tabPanel("Network Plot",
+            br(),
+            plotOutput("enrichment_network", height = "700px")
+          ),
+          conditionalPanel(
+            condition = "input.enrich_type == 'gsea'",
+            tabPanel("GSEA Plots",
+              br(),
+              plotOutput("enrichment_gsea", height = "800px")
+            )
           )
         )
       )
@@ -534,20 +640,63 @@ server <- function(input, output, session) {
       DT::formatRound(columns = c("p_val", "avg_log2FC", "pct.1", "pct.2", "p_val_adj"), digits = 4)
   })
   
-  output$de_volcano <- renderPlotly({
+  # Reactive volcano plot (for display and download)
+  volcano_plot <- reactive({
     req(de_results())
     df <- de_results()
-    df$significant <- df$p_val_adj < 0.05
     
-    p <- ggplot(df, aes(x = avg_log2FC, y = -log10(p_val), text = gene, color = significant)) +
-      geom_point(alpha = 0.6) +
+    # Get threshold values from inputs
+    logfc_thresh <- input$de_logfc
+    pval_thresh <- input$de_pval
+    if (is.null(pval_thresh)) pval_thresh <- 0.05
+    
+    # Get aesthetic controls
+    pt_size <- input$volcano_pt_size
+    if (is.null(pt_size)) pt_size <- 2
+    alpha_val <- input$volcano_alpha
+    if (is.null(alpha_val)) alpha_val <- 0.6
+    sig_color <- input$volcano_sig_color
+    if (is.null(sig_color)) sig_color <- "#E74C3C"
+    nonsig_color <- input$volcano_nonsig_color
+    if (is.null(nonsig_color)) nonsig_color <- "#95A5A6"
+    
+    # Determine significance based on user's threshold
+    df$significant <- df$p_val_adj < pval_thresh
+    
+    # Calculate symmetric x-axis limits
+    max_abs_fc <- max(abs(df$avg_log2FC), na.rm = TRUE)
+    x_limit <- ceiling(max_abs_fc * 1.1)  # Add 10% padding
+    
+    ggplot(df, aes(x = avg_log2FC, y = -log10(p_val), text = gene, color = significant)) +
+      geom_point(size = pt_size, alpha = alpha_val) +
+      # Add threshold lines
+      geom_hline(yintercept = -log10(pval_thresh), linetype = "dashed", color = "black", linewidth = 0.8) +
+      geom_vline(xintercept = c(-logfc_thresh, logfc_thresh), linetype = "dashed", color = "black", linewidth = 0.8) +
+      # Symmetric x-axis
+      coord_cartesian(xlim = c(-x_limit, x_limit)) +
       theme_minimal() +
-      scale_color_manual(values = c("gray", "red")) +
+      scale_color_manual(values = c(nonsig_color, sig_color), name = paste0("p-adj < ", pval_thresh)) +
       labs(title = paste("Volcano Plot:", input$de_ident_1, "vs", input$de_ident_2),
            x = "avg_log2FC", y = "-log10(p-value)")
-    
-    ggplotly(p, tooltip = "text")
   })
+  
+  output$de_volcano <- renderPlotly({
+    req(volcano_plot())
+    ggplotly(volcano_plot(), tooltip = "text")
+  })
+  
+  output$download_volcano <- downloadHandler(
+    filename = function() { 
+      paste0("Volcano_", input$de_ident_1, "_vs_", input$de_ident_2, "_", Sys.Date(), ".", input$volcano_format) 
+    },
+    content = function(file) {
+      req(volcano_plot())
+      ggsave(file, volcano_plot(), 
+             width = input$volcano_width, 
+             height = input$volcano_height, 
+             device = input$volcano_format)
+    }
+  )
   
   output$download_de <- downloadHandler(
     filename = function() { paste0("DE_", input$de_ident_1, "_vs_", input$de_ident_2, "_", Sys.Date(), ".csv") },
@@ -834,7 +983,7 @@ server <- function(input, output, session) {
           } else if (ptype == "ViolinPlot") {
             req(feat)
             p <- tryCatch({
-              SCpubr::do_ViolinPlot(
+              result <- SCpubr::do_ViolinPlot(
                 sample = obj,
                 features = feat,
                 group.by = grp,
@@ -863,7 +1012,7 @@ server <- function(input, output, session) {
             }
             
             p <- tryCatch({
-              SCpubr::do_DotPlot(
+              result <- SCpubr::do_DotPlot(
                 sample = obj,
                 features = feat,
                 group.by = grp,
@@ -876,7 +1025,7 @@ server <- function(input, output, session) {
               )
             }, error = function(e) {
               # If split.by fails, try without it
-              SCpubr::do_DotPlot(
+              result <- SCpubr::do_DotPlot(
                 sample = obj,
                 features = feat,
                 group.by = grp,
@@ -1066,11 +1215,18 @@ server <- function(input, output, session) {
         lvls <- sort(unique(seurat_obj()@meta.data[[grp]]))
       }
       
-      if (length(lvls) > 30) return(p("Too many levels for manual colors"))
-      
-      lapply(lvls, function(l) {
+      # Create scrollable div for many levels
+      color_pickers <- lapply(lvls, function(l) {
         colourInput(ns(paste0("col_", l)), paste("Color", l), value="gray")
       })
+      
+      if (length(lvls) > 20) {
+        div(style="max-height: 400px; overflow-y: auto; padding: 5px;",
+            p(paste("Showing", length(lvls), "color pickers (scroll to see all)")),
+            color_pickers)
+      } else {
+        color_pickers
+      }
     })
   })
   
