@@ -277,6 +277,15 @@ ui <- navbarPage(
                               "Gene Set Enrichment (GSEA)" = "gsea"),
                    selected = "ora"),
         
+        conditionalPanel(
+          condition = "input.enrich_type == 'ora' && input.enrich_source == 'de'",
+          selectInput("enrich_gene_direction", "Gene Direction",
+                     choices = c("All Significant Genes" = "all",
+                                "Upregulated Only (positive log2FC)" = "up",
+                                "Downregulated Only (negative log2FC)" = "down"),
+                     selected = "all")
+        ),
+        
         selectInput("enrich_database", "Database",
                    choices = c("MSigDB Hallmarks" = "hallmark",
                               "GO Biological Process" = "go_bp",
@@ -310,9 +319,18 @@ ui <- navbarPage(
         selectInput("enrich_plot_format", "Format", choices = c("png", "pdf", "jpg"), selected = "png"),
         numericInput("enrich_plot_width", "Width (inches)", value = 10, min = 4, max = 20),
         numericInput("enrich_plot_height", "Height (inches)", value = 8, min = 4, max = 20),
-        downloadButton("download_enrichment_dotplot", "Download Dot Plot", class="btn-info btn-block"),
-        downloadButton("download_enrichment_barplot", "Download Bar Plot", class="btn-info btn-block"),
-        downloadButton("download_enrichment_network", "Download Network Plot", class="btn-info btn-block")
+        
+        conditionalPanel(
+          condition = "input.enrich_type == 'ora'",
+          downloadButton("download_enrichment_dotplot", "Download Dot Plot", class="btn-info btn-block"),
+          downloadButton("download_enrichment_barplot", "Download Bar Plot", class="btn-info btn-block"),
+          downloadButton("download_enrichment_network", "Download Network Plot", class="btn-info btn-block")
+        ),
+        
+        conditionalPanel(
+          condition = "input.enrich_type == 'gsea'",
+          downloadButton("download_enrichment_gsea", "Download GSEA Curves", class="btn-info btn-block")
+        )
       ),
       mainPanel(
         width = 9,
@@ -745,8 +763,51 @@ server <- function(input, output, session) {
     if (input$enrich_source == "de") {
       req(de_results())
       df <- de_results()
-      genes <- df$gene
-      gene_fc <- setNames(df$avg_log2FC, df$gene)
+      
+      # For ORA: use only significant genes (typically upregulated/significant)
+      # For GSEA: use all genes ranked by fold change
+      if (input$enrich_type == "ora") {
+        # Filter to significant genes (p_val_adj < 0.05)
+        df_sig <- df[df$p_val_adj < 0.05, ]
+        if (nrow(df_sig) == 0) {
+          showNotification("No significant genes found for ORA. Please adjust DE p-value threshold.", 
+                          type = "error")
+          return(NULL)
+        }
+        
+        # Apply direction filter
+        direction <- input$enrich_gene_direction
+        if (is.null(direction)) direction <- "all"
+        
+        if (direction == "up") {
+          # Upregulated in Group 1 (positive log2FC)
+          df_sig <- df_sig[df_sig$avg_log2FC > 0, ]
+          direction_label <- "upregulated"
+        } else if (direction == "down") {
+          # Downregulated in Group 1 (negative log2FC)
+          df_sig <- df_sig[df_sig$avg_log2FC < 0, ]
+          direction_label <- "downregulated"
+        } else {
+          direction_label <- "significant"
+        }
+        
+        if (nrow(df_sig) == 0) {
+          showNotification(paste("No", direction_label, "genes found. Try different direction."), 
+                          type = "error")
+          return(NULL)
+        }
+        
+        genes <- df_sig$gene
+        gene_fc <- setNames(df_sig$avg_log2FC, df_sig$gene)
+        showNotification(paste("Using", length(genes), direction_label, "genes from DE results"), 
+                        type = "message")
+      } else {
+        # GSEA uses all genes ranked by fold change
+        genes <- df$gene
+        gene_fc <- setNames(df$avg_log2FC, df$gene)
+        showNotification(paste("Using", length(genes), "ranked genes for GSEA"), 
+                        type = "message")
+      }
     } else {
       req(input$enrich_genes)
       genes <- strsplit(input$enrich_genes, "\\n")[[1]]
@@ -1015,14 +1076,19 @@ server <- function(input, output, session) {
     })
   })
   
+  # Reactive GSEA plot object for reuse
+  enrichment_gsea_obj <- reactive({
+    req(enrichment_results(), input$enrich_type == "gsea")
+    n_pathways <- min(5, nrow(enrichment_results()))
+    gseaplot2(enrichment_results(), geneSetID = 1:n_pathways, 
+             pvalue_table = TRUE)
+  })
+  
   # GSEA enrichment plots
   output$enrichment_gsea <- renderPlot({
-    req(enrichment_results(), input$enrich_type == "gsea")
+    req(enrichment_gsea_obj())
     tryCatch({
-      # Show top 5 pathways
-      n_pathways <- min(5, nrow(enrichment_results()))
-      gseaplot2(enrichment_results(), geneSetID = 1:n_pathways, 
-               pvalue_table = TRUE)
+      enrichment_gsea_obj()
     }, error = function(e) {
       ggplot() + annotate("text", x = 0, y = 0, 
                          label = paste("GSEA plot error:", e$message), 
@@ -1078,6 +1144,20 @@ server <- function(input, output, session) {
     content = function(file) {
       req(enrichment_network_obj())
       ggsave(file, enrichment_network_obj(), 
+             width = input$enrich_plot_width, 
+             height = input$enrich_plot_height, 
+             device = input$enrich_plot_format)
+    }
+  )
+  
+  # Download GSEA enrichment curves
+  output$download_enrichment_gsea <- downloadHandler(
+    filename = function() { 
+      paste0("Enrichment_GSEA_", input$enrich_database, "_", Sys.Date(), ".", input$enrich_plot_format) 
+    },
+    content = function(file) {
+      req(enrichment_gsea_obj())
+      ggsave(file, enrichment_gsea_obj(), 
              width = input$enrich_plot_width, 
              height = input$enrich_plot_height, 
              device = input$enrich_plot_format)
