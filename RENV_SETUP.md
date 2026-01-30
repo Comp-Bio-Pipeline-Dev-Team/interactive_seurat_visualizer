@@ -2,14 +2,14 @@
 
 ## What is renv?
 
-`renv` is an R package that creates reproducible environments by tracking exact package versions. This ensures that the Docker container builds with the same package versions every time.
+`renv` is an R package that creates reproducible environments by tracking exact package versions. This ensures that the Docker container builds with the same package  every time.
 
 ## Initial Setup (One-time)
 
 Run this **once** to create the `renv.lock` file:
 
 ```bash
-cd /home/tonya/Downloads/github/interactive_seurat_visualizer
+cd /path/to/interactive_seurat_visualizer
 
 # Option 1: Using Docker (recommended)
 docker run --rm -v $(pwd):/app -w /app rocker/r-ver:4.4.0 R -e "install.packages('renv'); renv::init(bare = TRUE); renv::snapshot()"

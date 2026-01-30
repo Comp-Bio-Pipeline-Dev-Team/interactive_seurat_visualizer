@@ -1,0 +1,248 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_OUTPUT_EXCMD	mixed	/number, pattern, mixed, or combineV2/
+!_TAG_OUTPUT_FILESEP	slash	/slash or backslash/
+!_TAG_OUTPUT_MODE	u-ctags	/u-ctags or e-ctags/
+!_TAG_PATTERN_LENGTH_LIMIT	96	/0 for no limit/
+!_TAG_PROC_CWD	/home/tonya/Downloads/github/interactive_seurat_visualizer/	//
+!_TAG_PROGRAM_AUTHOR	Universal Ctags Team	//
+!_TAG_PROGRAM_NAME	Universal Ctags	/Derived from Exuberant Ctags/
+!_TAG_PROGRAM_URL	https://ctags.io/	/official site/
+!_TAG_PROGRAM_VERSION	5.9.0	//
+"Center"	app.R	/^      column(6, selectInput(ns("title_align"), "Title Align", choices = c("Left"=0, "Center"=0.5/;"	n	vector:plotControlUI.anonVec0f1996260206
+"Cividis"	app.R	/^                    choices = c("Viridis" = "viridis", "Magma" = "magma", "Plasma" = "plasma", "/;"	n	vector:anonVec0f1996260f06
+"Dark = High (-1)"	app.R	/^                  choices = c("Dark = Low (1)" = 1, "Dark = High (-1)" = -1), selected = 1)$/;"	n	vector:plotControlUI.anonVec0f1996260606
+"Dark = Low (1)"	app.R	/^                  choices = c("Dark = Low (1)" = 1, "Dark = High (-1)" = -1), selected = 1)$/;"	n	vector:plotControlUI.anonVec0f1996260606
+"Inferno"	app.R	/^                    choices = c("Viridis" = "viridis", "Magma" = "magma", "Plasma" = "plasma", "/;"	n	vector:anonVec0f1996260f06
+"Left"	app.R	/^      column(6, selectInput(ns("title_align"), "Title Align", choices = c("Left"=0, "Center"=0.5/;"	n	vector:plotControlUI.anonVec0f1996260206
+"Magma"	app.R	/^                    choices = c("Viridis" = "viridis", "Magma" = "magma", "Plasma" = "plasma", "/;"	n	vector:anonVec0f1996260f06
+"MetBrewer"	app.R	/^                        "MetBrewer" = names(MetBrewer::MetPalettes)$/;"	n	list:anonList0f1996260e07
+"MetBrewer"	app.R	/^                    "MetBrewer" = names(MetBrewer::MetPalettes)$/;"	n	list:plotControlUI.anonList0f1996260407
+"None (Real Expression)"	app.R	/^                    choices = c("None (Real Expression)" = "none", $/;"	n	vector:anonVec0f1996260c06
+"Plasma"	app.R	/^                    choices = c("Viridis" = "viridis", "Magma" = "magma", "Plasma" = "plasma", "/;"	n	vector:anonVec0f1996260f06
+"RColorBrewer"	app.R	/^                        "RColorBrewer" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1",/;"	n	list:anonList0f1996260e07	constructor:c
+"RColorBrewer"	app.R	/^                    "RColorBrewer" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Ac/;"	n	list:plotControlUI.anonList0f1996260407	constructor:c
+"RdBu"	app.R	/^                    choices = c("Viridis" = "viridis", "Magma" = "magma", "Plasma" = "plasma", "/;"	n	vector:anonVec0f1996260f06
+"RdYlBu"	app.R	/^                    choices = c("Viridis" = "viridis", "Magma" = "magma", "Plasma" = "plasma", "/;"	n	vector:anonVec0f1996260f06
+"Right"	app.R	/^      column(6, selectInput(ns("title_align"), "Title Align", choices = c("Left"=0, "Center"=0.5/;"	n	vector:plotControlUI.anonVec0f1996260206
+"Row Z-score"	app.R	/^                                "Row Z-score" = "row")),$/;"	n	vector:anonVec0f1996260c06
+"Spectral"	app.R	/^                    choices = c("Viridis" = "viridis", "Magma" = "magma", "Plasma" = "plasma", "/;"	n	vector:anonVec0f1996260f06
+"Viridis"	app.R	/^                        "Viridis" = c("viridis", "magma", "plasma", "inferno", "cividis"),$/;"	n	list:anonList0f1996260e07	constructor:c
+"Viridis"	app.R	/^                    "Viridis" = c("viridis", "magma", "plasma", "inferno", "cividis"),$/;"	n	list:plotControlUI.anonList0f1996260407	constructor:c
+"Viridis"	app.R	/^                    choices = c("Viridis" = "viridis", "Magma" = "magma", "Plasma" = "plasma", "/;"	n	vector:anonVec0f1996260f06
+Accessing the App	DOCKER_INSTRUCTIONS.md	/^## Accessing the App$/;"	s	chapter:Docker Deployment Instructions
+Building the Docker Image	DOCKER_INSTRUCTIONS.md	/^## Building the Docker Image$/;"	s	chapter:Docker Deployment Instructions
+Check logs	DOCKER_INSTRUCTIONS.md	/^### Check logs$/;"	S	section:Docker Deployment Instructions""Troubleshooting
+Docker Deployment Instructions	DOCKER_INSTRUCTIONS.md	/^# Docker Deployment Instructions$/;"	c
+Features	README.md	/^## Features$/;"	s	chapter:Seurat Shiny App
+Interactive shell	DOCKER_INSTRUCTIONS.md	/^### Interactive shell$/;"	S	section:Docker Deployment Instructions""Troubleshooting
+Option 1: Docker (Recommended for Deployment)	README.md	/^### Option 1: Docker (Recommended for Deployment)$/;"	S	section:Seurat Shiny App""Quick Start
+Option 1: Using docker run	DOCKER_INSTRUCTIONS.md	/^### Option 1: Using docker run$/;"	S	section:Docker Deployment Instructions""Running with Docker
+Option 2: Local R Installation	README.md	/^### Option 2: Local R Installation$/;"	S	section:Seurat Shiny App""Quick Start
+Option 2: Using docker-compose (Recommended)	DOCKER_INSTRUCTIONS.md	/^### Option 2: Using docker-compose (Recommended)$/;"	S	section:Docker Deployment Instructions""Running with Docker
+Prerequisites	README.md	/^## Prerequisites$/;"	s	chapter:Seurat Shiny App
+Quick Start	README.md	/^## Quick Start$/;"	s	chapter:Seurat Shiny App
+Running with Docker	DOCKER_INSTRUCTIONS.md	/^## Running with Docker$/;"	s	chapter:Docker Deployment Instructions
+Seurat Shiny App	README.md	/^# Seurat Shiny App$/;"	c
+Troubleshooting	DOCKER_INSTRUCTIONS.md	/^## Troubleshooting$/;"	s	chapter:Docker Deployment Instructions
+Updating the App	DOCKER_INSTRUCTIONS.md	/^## Updating the App$/;"	s	chapter:Docker Deployment Instructions
+Usage	README.md	/^## Usage$/;"	s	chapter:Seurat Shiny App
+Version Control	DOCKER_INSTRUCTIONS.md	/^## Version Control$/;"	s	chapter:Docker Deployment Instructions
+Volume Mounting for Data	DOCKER_INSTRUCTIONS.md	/^## Volume Mounting for Data$/;"	s	chapter:Docker Deployment Instructions
+all_features	app.R	/^        all_features <- c(rownames(obj), colnames(obj@meta.data))$/;"	c	function:server
+all_features	app.R	/^      all_features <- c(rownames(seurat_obj()), colnames(seurat_obj()@meta.data))$/;"	c	function:server.anonVec0f1996262506.anonFunc0f1996262600
+anno_cols	app.R	/^        anno_cols <- NULL$/;"	v	function:server
+anno_pal	app.R	/^          anno_pal <- input$hm_anno_palette$/;"	v	function:server
+anno_source	app.R	/^        anno_source <- input$hm_anno_color_source$/;"	v	function:server
+anonFunc0f1996261000	app.R	/^    }, error = function(e) showNotification(paste("Error:", e$message), type="error"))$/;"	f	function:server
+anonFunc0f1996261200	app.R	/^      }, error = function(e) {$/;"	f	function:server
+anonFunc0f1996261400	app.R	/^    filename = function() { paste0("DE_", input$de_ident_1, "_vs_", input$de_ident_2, "_", Sys.D/;"	f	function:server
+anonFunc0f1996261500	app.R	/^    content = function(file) {$/;"	f	function:server
+anonFunc0f1996261600	app.R	/^    }, error=function(e) ggplot() + theme_void())$/;"	f	function:server
+anonFunc0f1996261800	app.R	/^        lapply(c("p1","p2","p3","p4"), function(id) {$/;"	f	vector:server.anonVec0f1996261706
+anonFunc0f1996261900	app.R	/^    }, error=function(e) {$/;"	f	function:server
+anonFunc0f1996261c00	app.R	/^      cols <- sapply(lvls, function(l) {$/;"	f	function:server.get_colors
+anonFunc0f1996262200	app.R	/^            }, error = function(e) {$/;"	f	function:server.generate_plot
+anonFunc0f1996262300	app.R	/^        }, error = function(e) {$/;"	f	function:server.generate_plot
+anonFunc0f1996262600	app.R	/^  lapply(c("p1","p2","p3","p4"), function(id) {$/;"	f	vector:server.anonVec0f1996262506
+anonFunc0f1996263200	app.R	/^      lapply(lvls, function(l) {$/;"	f	function:server.anonVec0f1996262506.anonFunc0f1996262600
+anonFunc0f1996263300	app.R	/^    lapply(lvls, function(l) {$/;"	f	function:server
+anonFunc0f1996263500	app.R	/^          mat <- t(apply(mat, 1, function(x) {$/;"	f	function:server
+anonFunc0f1996263600	app.R	/^          anno_cols <- sapply(lvls, function(l) {$/;"	f	function:server
+anonFunc0f1996263900	app.R	/^          p$layers <- lapply(p$layers, function(l) {$/;"	f	function:server
+anonFunc0f1996263c00	app.R	/^      }, error = function(e) {$/;"	f	function:server
+anonFunc0f1996263d00	app.R	/^    filename = function() { paste0("heatmap_", Sys.Date(), ".pdf") },$/;"	f	function:server
+anonFunc0f1996263e00	app.R	/^    content = function(file) {$/;"	f	function:server
+anonFunc0f1996263f00	app.R	/^                             error=function(e) ggplot() + annotate("text", x=0, y=0, label="Conf/;"	f	function:server
+anonFunc0f1996264000	app.R	/^                             error=function(e) ggplot() + annotate("text", x=0, y=0, label="Conf/;"	f	function:server
+anonFunc0f1996264100	app.R	/^                             error=function(e) ggplot() + annotate("text", x=0, y=0, label="Conf/;"	f	function:server
+anonFunc0f1996264200	app.R	/^                             error=function(e) ggplot() + annotate("text", x=0, y=0, label="Conf/;"	f	function:server
+anonFunc0f1996264300	app.R	/^    filename = function() paste0("seurat_plot_", Sys.Date(), ".", input$export_format),$/;"	f	function:server
+anonFunc0f1996264400	app.R	/^    content = function(file) {$/;"	f	function:server
+anonList0f1996260407	app.R	/^                  choices = list($/;"	L	function:plotControlUI
+anonList0f1996260b07	app.R	/^        selectizeInput("hm_features", "Features (select multiple)", choices = NULL, multiple = T/;"	L
+anonList0f1996260e07	app.R	/^                      choices = list($/;"	L
+anonList0f1996262a07	app.R	/^            selectizeInput(ns("feature"), "Features (select multiple)", choices=NULL, multiple=T/;"	L	function:server.anonVec0f1996262506.anonFunc0f1996262600
+anonList0f1996262c07	app.R	/^            selectizeInput(ns("feature"), "Feature", choices=NULL, options=list($/;"	L	function:server.anonVec0f1996262506.anonFunc0f1996262600
+anonList0f1996263707	app.R	/^        update_geom_defaults("segment", list(colour = "white"))$/;"	L	function:server
+anonList0f1996263807	app.R	/^          update_geom_defaults("segment", list(colour = orig_segment_color))$/;"	L	function:server
+anonVec0f1996260206	app.R	/^      column(6, selectInput(ns("title_align"), "Title Align", choices = c("Left"=0, "Center"=0.5/;"	c	function:plotControlUI
+anonVec0f1996260506	app.R	/^                  choices = c("bottom", "top", "left", "right", "none"), selected = "bottom"),$/;"	c	function:plotControlUI
+anonVec0f1996260606	app.R	/^                  choices = c("Dark = Low (1)" = 1, "Dark = High (-1)" = -1), selected = 1)$/;"	c	function:plotControlUI
+anonVec0f1996260a06	app.R	/^        selectInput("de_test", "Test Type", choices = c("wilcox", "t-test", "roc", "LR"), select/;"	c
+anonVec0f1996260c06	app.R	/^                    choices = c("None (Real Expression)" = "none", $/;"	c
+anonVec0f1996260f06	app.R	/^                    choices = c("Viridis" = "viridis", "Magma" = "magma", "Plasma" = "plasma", "/;"	c
+anonVec0f1996261706	app.R	/^        lapply(c("p1","p2","p3","p4"), function(id) {$/;"	c	function:server
+anonVec0f1996262506	app.R	/^  lapply(c("p1","p2","p3","p4"), function(id) {$/;"	c	function:server
+border	app.R	/^        border <- input[[ns("scpubr_border")]]$/;"	v	function:server.generate_plot
+c	app.R	/^            c <- input[[paste0("hm_col_", l)]]$/;"	v	function:server.anonFunc0f1996263600
+c	app.R	/^        c <- input[[ns(paste0("col_", l))]]$/;"	v	function:server.get_colors.anonFunc0f1996261c00
+cells	app.R	/^    cells <- rownames(seurat_obj()@meta.data[seurat_obj()@meta.data[[input$subset_col]] %in% inp/;"	v	function:server
+cividis	app.R	/^                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E"/;"	g
+cividis	app.R	/^                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E"/;"	n	list:server.generate_plot.viridis_map
+cividis	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	n	list:server.get_colors.option_map
+cividis	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	n	list:server.option_map
+colors	app.R	/^    colors <- get_colors(id, obj, if(is.null(grp)) "Default" else grp)$/;"	v	function:server.generate_plot
+colors.use	app.R	/^              colors.use = colors,$/;"	v	function:server.generate_plot
+colour	app.R	/^          update_geom_defaults("segment", list(colour = orig_segment_color))$/;"	n	list:server.anonList0f1996263807
+colour	app.R	/^        update_geom_defaults("segment", list(colour = "white"))$/;"	n	list:server.anonList0f1996263707
+cols	app.R	/^        cols <- viridis::viridis(n, option=option_map[[pal]])$/;"	v	function:server.get_colors
+cols_cont	app.R	/^      cols_cont <- if(!is.null(colors) && length(colors) >= 2) c(colors[1], colors[length(colors/;"	v	function:server.generate_plot
+columns	app.R	/^      DT::formatRound(columns = c("p_val", "avg_log2FC", "pct.1", "pct.2", "p_val_adj"), digits /;"	c	function:server
+count_size	app.R	/^        count_size <- input[[ns("count_size")]]$/;"	v	function:server.generate_plot
+de_results	app.R	/^  de_results <- reactiveVal(NULL)$/;"	v	function:server
+df	app.R	/^      df <- as.data.frame(table(obj@meta.data[[g1]], obj@meta.data[[g2]]))$/;"	v	function:server.generate_plot
+df	app.R	/^    df <- de_results()$/;"	v	function:server
+df_totals	app.R	/^        df_totals <- aggregate(Count ~ Sample, df, sum)$/;"	v	function:server.generate_plot
+digits	app.R	/^      DT::formatRound(columns = c("p_val", "avg_log2FC", "pct.1", "pct.2", "p_val_adj"), digits /;"	n	vector:server.columns
+drop	app.R	/^        mat <- as.matrix(GetAssayData(obj, assay = "RNA", layer = "data")[gene_feats, , drop = F/;"	v	function:server
+existing_feats	app.R	/^        existing_feats <- feats[feats %in% c(rownames(obj), colnames(obj@meta.data))]$/;"	v	function:server
+feat	app.R	/^    feat <- input[[ns("feature")]]$/;"	v	function:server.generate_plot
+feats	app.R	/^          feats <- feat$/;"	v	function:server.generate_plot
+feats	app.R	/^        feats <- input$hm_features$/;"	v	function:server
+features	app.R	/^                features = feat,$/;"	v	function:server.generate_plot.anonFunc0f1996262200
+features	app.R	/^              features = feat,$/;"	v	function:server.generate_plot
+flip	app.R	/^    flip <- input[[ns("flip_coords")]]$/;"	v	function:server.generate_plot
+font.size	app.R	/^                font.size = font_size,$/;"	v	function:server.generate_plot.anonFunc0f1996262200
+font.size	app.R	/^              font.size = font_size,$/;"	v	function:server.generate_plot
+font_size	app.R	/^        font_size <- input[[ns("scpubr_font_size")]]$/;"	v	function:server.generate_plot
+g1	app.R	/^      g1 <- input[[ns("cdb_group1")]]$/;"	v	function:server.generate_plot
+g2	app.R	/^      g2 <- input[[ns("cdb_group2")]]$/;"	v	function:server.generate_plot
+gene_feats	app.R	/^        gene_feats <- existing_feats[existing_feats %in% rownames(obj)]$/;"	v	function:server
+generate_plot	app.R	/^  generate_plot <- function(id, obj) {$/;"	f	function:server
+genes	app.R	/^    genes <- trimws(unlist(strsplit(input$sig_genes, "\\n")))$/;"	v	function:server
+get_colors	app.R	/^  get_colors <- function(id, obj, group_var, for_scpubr = FALSE) {$/;"	f	function:server
+group.by	app.R	/^                group.by = grp,$/;"	v	function:server.generate_plot.anonFunc0f1996262200
+group.by	app.R	/^              group.by = grp,$/;"	v	function:server.generate_plot
+grp	app.R	/^      grp <- input[[ns("group_by")]]$/;"	v	function:server.anonVec0f1996262506.anonFunc0f1996262600
+grp	app.R	/^    grp <- input$hm_group_by$/;"	v	function:server
+grp	app.R	/^    grp <- input[[ns("group_by")]]$/;"	v	function:server.generate_plot
+has_scpubr	app.R	/^has_scpubr <- requireNamespace("SCpubr", quietly = TRUE)$/;"	g
+has_ucell	app.R	/^has_ucell <- requireNamespace("UCell", quietly = TRUE)$/;"	g
+heatmap_obj	app.R	/^  heatmap_obj <- reactiveVal(NULL)$/;"	v	function:server
+ident2	app.R	/^        ident2 <- if(input$de_ident_2 == "All Others") NULL else input$de_ident_2$/;"	v	function:server
+inferno	app.R	/^                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E"/;"	g
+inferno	app.R	/^                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E"/;"	n	list:server.generate_plot.viridis_map
+inferno	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	n	list:server.get_colors.option_map
+inferno	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	n	list:server.option_map
+legend.position	app.R	/^                legend.position = legend_pos,$/;"	v	function:server.generate_plot.anonFunc0f1996262200
+legend.position	app.R	/^              legend.position = legend_pos,$/;"	v	function:server.generate_plot
+legend_pos	app.R	/^        legend_pos <- input[[ns("scpubr_legend_pos")]]$/;"	v	function:server.generate_plot
+legend_title	app.R	/^        legend_title <- "Expression"$/;"	v	function:server
+lvls	app.R	/^        lvls <- levels(Idents(seurat_obj()))$/;"	v	function:server.anonVec0f1996262506.anonFunc0f1996262600
+lvls	app.R	/^      lvls <- levels(Idents(obj))$/;"	v	function:server.get_colors
+lvls	app.R	/^    lvls <- sort(unique(as.character(seurat_obj()@meta.data[[input$de_group_by]])))$/;"	v	function:server
+magma	app.R	/^                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E"/;"	g
+magma	app.R	/^                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E"/;"	n	list:server.generate_plot.viridis_map
+magma	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	n	list:server.get_colors.option_map
+magma	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	n	list:server.option_map
+mat	app.R	/^        mat <- as.matrix(GetAssayData(obj, assay = "RNA", layer = "data")[gene_feats, , drop = F/;"	v	function:server
+max_n	app.R	/^            max_n <- RColorBrewer::brewer.pal.info[anno_pal, "maxcolors"]$/;"	v	function:server
+max_n	app.R	/^        max_n <- RColorBrewer::brewer.pal.info[pal, "maxcolors"]$/;"	v	function:server.get_colors
+meta_cols	app.R	/^    meta_cols <- names(seurat_obj()@meta.data)$/;"	v	function:server
+meta_feats	app.R	/^        meta_feats <- existing_feats[existing_feats %in% colnames(obj@meta.data)]$/;"	v	function:server
+metas	app.R	/^      metas <- c("Default", names(seurat_obj()@meta.data))$/;"	c	function:server.anonVec0f1996262506.anonFunc0f1996262600
+n	app.R	/^          n <- length(lvls)$/;"	v	function:server
+n	app.R	/^    n <- length(lvls)$/;"	v	function:server.get_colors
+name	app.R	/^            p <- p + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 11, name = p/;"	v	function:server
+ns	app.R	/^    ns <- function(x) paste0(id, "-", x)$/;"	f	function:server.anonVec0f1996262506.anonFunc0f1996262600
+ns	app.R	/^    ns <- function(x) paste0(id, "-", x)$/;"	f	function:server.generate_plot
+ns	app.R	/^    ns <- function(x) paste0(id, "-", x)$/;"	f	function:server.get_colors
+ns	app.R	/^  ns <- NS(id)$/;"	v	function:plotControlUI
+obj	app.R	/^      obj <- readRDS(input$seurat_file$datapath)$/;"	v	function:server
+onInitialize	app.R	/^              onInitialize = I('function() { this.setValue(""); }')$/;"	n	list:server.anonVec0f1996262506.anonFunc0f1996262600.anonList0f1996262a07
+onInitialize	app.R	/^              onInitialize = I('function() { this.setValue(""); }')$/;"	n	list:server.anonVec0f1996262506.anonFunc0f1996262600.anonList0f1996262c07
+option	app.R	/^            anno_cols <- viridis::viridis(n, option = option_map[[anno_pal]])$/;"	v	function:server
+option	app.R	/^        cols <- viridis::viridis(n, option=option_map[[pal]])$/;"	v	function:server.get_colors
+option_map	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	L	function:server
+option_map	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	L	function:server.get_colors
+options	app.R	/^    DT::datatable(de_results(), options = list(pageLength = 10, scrollX = TRUE), rownames = FALS/;"	L	function:server
+orig_segment_color	app.R	/^        orig_segment_color <- get_geom_defaults("segment")$colour$/;"	v	function:server
+original_obj	app.R	/^  original_obj <- reactiveVal(NULL)$/;"	v	function:server
+p	app.R	/^      p <- if(tgt=="All Plots") (plot_list$p1 + plot_list$p2) \/ (plot_list$p3 + plot_list$p4)$/;"	v	function:server.anonFunc0f1996264400
+p	app.R	/^    p <- NULL$/;"	v	function:server.generate_plot
+p	app.R	/^    p <- ggplot(df, aes(x = avg_log2FC, y = -log10(p_val), text = gene, color = significant)) +$/;"	v	function:server
+pageLength	app.R	/^    DT::datatable(de_results(), options = list(pageLength = 10, scrollX = TRUE), rownames = FALS/;"	n	list:server.options
+pal	app.R	/^        pal <- input$hm_palette$/;"	v	function:server
+pal	app.R	/^      pal <- input[[ns("palette_name")]]$/;"	v	function:server.get_colors
+pal_name	app.R	/^              pal_name <- input[[ns("palette_name")]]$/;"	v	function:server.generate_plot
+pal_source	app.R	/^            pal_source <- input[[ns("color_source")]]$/;"	v	function:server.generate_plot
+placeholder	app.R	/^              placeholder = 'Type to search and select multiple genes...',$/;"	n	list:server.anonVec0f1996262506.anonFunc0f1996262600.anonList0f1996262a07
+placeholder	app.R	/^              placeholder = 'Type to search genes or metadata...',$/;"	n	list:server.anonVec0f1996262506.anonFunc0f1996262600.anonList0f1996262c07
+placeholder	app.R	/^          placeholder = 'Type genes or metadata...'$/;"	n	list:anonList0f1996260b07
+plasma	app.R	/^                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E"/;"	g
+plasma	app.R	/^                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E"/;"	n	list:server.generate_plot.viridis_map
+plasma	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	n	list:server.get_colors.option_map
+plasma	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	n	list:server.option_map
+plotControlUI	app.R	/^plotControlUI <- function(id) {$/;"	f
+plot_cell_borders	app.R	/^              plot_cell_borders = border,$/;"	v	function:server.generate_plot
+plot_list	app.R	/^  plot_list <- reactiveValues()$/;"	v	function:server
+pt.size	app.R	/^              pt.size = pt_size,$/;"	v	function:server.generate_plot
+pt_size	app.R	/^    pt_size <- input[[ns("pt_size")]]$/;"	v	function:server.generate_plot
+ptype	app.R	/^      ptype <- input[[ns("plot_type")]]$/;"	v	function:server.anonVec0f1996262506.anonFunc0f1996262600
+ptype	app.R	/^    ptype <- input[[ns("plot_type")]]$/;"	v	function:server.generate_plot
+raster	app.R	/^              raster = ncol(obj) > 50000,$/;"	v	function:server.generate_plot
+raster.dpi	app.R	/^              raster.dpi = raster_dpi$/;"	v	function:server.generate_plot
+raster_dpi	app.R	/^        raster_dpi <- input[[ns("scpubr_raster_dpi")]]$/;"	v	function:server.generate_plot
+red	app.R	/^      red <- names(seurat_obj()@reductions)[1]$/;"	v	function:server
+red	app.R	/^    red <- input[[ns("reduction")]]$/;"	v	function:server.generate_plot
+reds	app.R	/^      reds <- names(seurat_obj()@reductions)$/;"	v	function:server.anonVec0f1996262506.anonFunc0f1996262600
+reduction	app.R	/^              reduction = red,$/;"	v	function:server.generate_plot
+res	app.R	/^        res <- FindMarkers($/;"	v	function:server
+rownames	app.R	/^    DT::datatable(de_results(), options = list(pageLength = 10, scrollX = TRUE), rownames = FALS/;"	n	list:server.options
+sample	app.R	/^                sample = obj,$/;"	v	function:server.generate_plot.anonFunc0f1996262200
+sample	app.R	/^              sample = obj,$/;"	v	function:server.generate_plot
+scaling	app.R	/^        scaling <- input$hm_scaling$/;"	v	function:server
+scrollX	app.R	/^    DT::datatable(de_results(), options = list(pageLength = 10, scrollX = TRUE), rownames = FALS/;"	n	list:server.options
+selected	app.R	/^                  choices = c("Dark = Low (1)" = 1, "Dark = High (-1)" = -1), selected = 1)$/;"	n	vector:plotControlUI.anonVec0f1996260606
+selected	app.R	/^                  choices = c("bottom", "top", "left", "right", "none"), selected = "bottom"),$/;"	n	vector:plotControlUI.anonVec0f1996260506
+selected	app.R	/^        selectInput("de_test", "Test Type", choices = c("wilcox", "t-test", "roc", "LR"), select/;"	n	vector:anonVec0f1996260a06
+selected	app.R	/^      column(6, selectInput(ns("title_align"), "Title Align", choices = c("Left"=0, "Center"=0.5/;"	n	vector:plotControlUI.anonVec0f1996260206
+server	app.R	/^server <- function(input, output, session) {$/;"	f
+seurat_obj	app.R	/^  seurat_obj <- reactiveVal(NULL)$/;"	v	function:server
+show_counts	app.R	/^      show_counts <- input[[ns("show_counts")]]$/;"	v	function:server.generate_plot
+sig_col	app.R	/^      sig_col <- grep(input$sig_name, colnames(obj@meta.data), value=TRUE)[1]$/;"	v	function:server
+sig_list	app.R	/^    sig_list <- list()$/;"	L	function:server
+source	app.R	/^    source <- input[[ns("color_source")]]$/;"	v	function:server.get_colors
+split.by	app.R	/^              split.by = splt,$/;"	v	function:server.generate_plot
+split.plot	app.R	/^              split.plot = TRUE,$/;"	v	function:server.generate_plot
+splt	app.R	/^    splt <- input[[ns("split_by")]]$/;"	v	function:server.generate_plot
+style	app.R	/^    style <- input[[ns("plot_style")]]$/;"	v	function:server.generate_plot
+tgt	app.R	/^      tgt <- input$export_target$/;"	v	function:server.anonFunc0f1996264400
+title	app.R	/^    title <- input[[ns("custom_title")]]$/;"	v	function:server.generate_plot
+tmp_obj	app.R	/^        tmp_obj <- subset(obj, features = gene_feats)$/;"	v	function:server
+ui	app.R	/^ui <- navbarPage($/;"	g
+update	setup.R	/^BiocManager::install("UCell", update = FALSE)$/;"	g
+use_viridis	app.R	/^                use_viridis = use_viridis,$/;"	v	function:server.generate_plot.anonFunc0f1996262200
+use_viridis	app.R	/^            use_viridis <- FALSE$/;"	v	function:server.generate_plot
+vals	app.R	/^    vals <- sort(unique(seurat_obj()@meta.data[[input$subset_col]]))$/;"	v	function:server
+viridis	app.R	/^                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E"/;"	g
+viridis	app.R	/^                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E"/;"	n	list:server.generate_plot.viridis_map
+viridis	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	n	list:server.get_colors.option_map
+viridis	app.R	/^        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")$/;"	n	list:server.option_map
+viridis.direction	app.R	/^                viridis.direction = as.numeric(input[[ns("scpubr_viridis_dir")]])$/;"	v	function:server.generate_plot.anonFunc0f1996262200
+viridis.direction	app.R	/^              viridis.direction = as.numeric(input[[ns("scpubr_viridis_dir")]])$/;"	v	function:server.generate_plot
+viridis.palette	app.R	/^                viridis.palette = viridis_pal,$/;"	v	function:server.generate_plot.anonFunc0f1996262200
+viridis.palette	app.R	/^              viridis.palette = viridis_pal,$/;"	v	function:server.generate_plot
+viridis_map	app.R	/^                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E"/;"	L	function:server.generate_plot
+viridis_pal	app.R	/^            viridis_pal <- "D"  # Default to standard viridis$/;"	v	function:server.generate_plot

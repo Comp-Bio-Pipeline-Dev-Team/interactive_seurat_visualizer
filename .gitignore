@@ -6,3 +6,4 @@
 renv/library
 renv/python
 renv/staging
+default.profraw
