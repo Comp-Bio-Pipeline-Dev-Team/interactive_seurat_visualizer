@@ -30,6 +30,10 @@ if (has_enrichment) {
 
 options(shiny.maxRequestSize = 10000 * 1024^2)
 
+# --- Load Utility Modules ---
+source("color_utils.R")
+source("plot_cluster_distribution.R")
+
 # --- UI Helper ---
 plotControlUI <- function(id) {
   ns <- NS(id)
@@ -1254,65 +1258,17 @@ server <- function(input, output, session) {
     })
   })
   
-  # --- Color Helper ---
+  # --- Color Helper (Refactored to use color_utils.R) ---
   get_colors <- function(id, obj, group_var, for_scpubr = FALSE) {
     ns <- function(x) paste0(id, "-", x)
-    source <- input[[ns("color_source")]]
     
-    if (source == "Default") return(NULL)
+    # Get levels for the grouping variable
+    levels <- get_group_levels(obj, group_var)
     
-    # Determine levels
-    if (is.null(group_var) || group_var == "None" || group_var == "Default") {
-      lvls <- levels(Idents(obj))
-    } else {
-      lvls <- sort(unique(obj@meta.data[[group_var]]))
-    }
+    # Use unified color utility function
+    colors <- get_plot_colors(input, ns, levels, named = for_scpubr)
     
-    n <- length(lvls)
-    if (n == 0) return(NULL)
-    
-    if (source == "Palette") {
-      pal <- input[[ns("palette_name")]]
-      
-      # Viridis family - fix option mapping
-      if (pal %in% c("viridis", "magma", "plasma", "inferno", "cividis")) {
-        option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")
-        cols <- viridis::viridis(n, option=option_map[[pal]])
-      } else if (pal %in% names(MetBrewer::MetPalettes)) {
-        # MetBrewer
-        cols <- MetBrewer::met.brewer(pal, n)
-      } else if (pal %in% c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Accent")) {
-        # RColorBrewer
-        max_n <- RColorBrewer::brewer.pal.info[pal, "maxcolors"]
-        if (n <= max_n) {
-          cols <- RColorBrewer::brewer.pal(n, pal)
-        } else {
-          cols <- colorRampPalette(RColorBrewer::brewer.pal(max_n, pal))(n)
-        }
-      } else {
-        return(NULL)
-      }
-      
-      # For SCpubr, return named vector
-      if (for_scpubr) {
-        names(cols) <- lvls
-      }
-      return(cols)
-    }
-    
-    if (source == "Manual") {
-      cols <- sapply(lvls, function(l) {
-        c <- input[[ns(paste0("col_", l))]]
-        if(is.null(c)) "gray" else c
-      })
-      # For SCpubr, ensure it's a named vector
-      if (for_scpubr) {
-        names(cols) <- lvls
-      }
-      return(cols)
-    }
-    
-    return(NULL)
+    return(colors)
   }
   
   # --- Plot Generator ---
@@ -1329,11 +1285,18 @@ server <- function(input, output, session) {
     if (!is.null(grp) && grp == "Default") grp <- NULL
     if (!is.null(splt) && splt == "None") splt <- NULL
     
-    colors <- get_colors(id, obj, if(is.null(grp)) "Default" else grp)
+    # Determine the correct grouping variable for color retrieval
+    # For ClusterDistrBar, use cdb_group2 (fill variable) instead of group_by
+    color_group_var <- grp
+    if (ptype == "ClusterDistrBar") {
+      color_group_var <- input[[ns("cdb_group2")]]
+    }
+    
+    colors <- get_colors(id, obj, if(is.null(color_group_var)) "Default" else color_group_var)
     # For SCpubr, get named colors
     style <- input[[ns("plot_style")]]
     if (!is.null(style) && style == "SCpubr") {
-      colors <- get_colors(id, obj, if(is.null(grp)) "Default" else grp, for_scpubr = TRUE)
+      colors <- get_colors(id, obj, if(is.null(color_group_var)) "Default" else color_group_var, for_scpubr = TRUE)
     }
     pt_size <- input[[ns("pt_size")]]
     if (is.null(pt_size)) pt_size <- 1  # Default if not set
@@ -1341,36 +1304,22 @@ server <- function(input, output, session) {
     p <- NULL
     
     if (ptype == "ClusterDistrBar") {
-      g1 <- input[[ns("cdb_group1")]]
-      g2 <- input[[ns("cdb_group2")]]
-      req(g1, g2)
+      # Use modular plotting function
+      params <- validate_cluster_distribution_params(input, ns, obj)
       
-      df <- as.data.frame(table(obj@meta.data[[g1]], obj@meta.data[[g2]]))
-      colnames(df) <- c("Sample", "Cluster", "Count")
-      
-      p <- ggplot(df, aes(x=Sample, y=Count, fill=Cluster)) + 
-        geom_bar(stat="identity", position="fill") +
-        scale_y_continuous(labels = scales::percent) +
-        labs(y="Proportion", x=g1, fill=g2) +
-        theme_classic() +
-        theme(axis.text.x = element_text(angle=45, hjust=1))
-      
-      if (!is.null(colors)) p <- p + scale_fill_manual(values=colors)
-      
-      # Add cell counts if requested
-      show_counts <- input[[ns("show_counts")]]
-      if (!is.null(show_counts) && show_counts) {
-        # Calculate totals per sample
-        df_totals <- aggregate(Count ~ Sample, df, sum)
-        colnames(df_totals) <- c("Sample", "Total")
-        df_totals$label_y <- 1.05  # Position above bar
-        
-        # Get count size (default to 3 if not set)
-        count_size <- input[[ns("count_size")]]
-        if (is.null(count_size)) count_size <- 3
-        
-        p <- p + geom_text(data=df_totals, aes(x=Sample, y=label_y, label=paste0("n=", Total)), 
-                          inherit.aes=FALSE, size=count_size, fontface="bold")
+      if (!is.null(params)) {
+        p <- plot_cluster_distribution(
+          obj = obj,
+          group1 = params$group1,
+          group2 = params$group2,
+          colors = colors,
+          flip = isTRUE(params$flip),
+          show_counts = isTRUE(params$show_counts),
+          count_size = if(is.null(params$count_size)) 3 else params$count_size,
+          title = params$title,
+          title_size = if(is.null(params$title_size)) 16 else params$title_size,
+          show_legend = isTRUE(params$show_legend)
+        )
       }
       
     } else {
