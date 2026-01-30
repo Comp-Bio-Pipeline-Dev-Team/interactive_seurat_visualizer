@@ -204,6 +204,40 @@ ui <- navbarPage(
     )
   )),
   
+  tabPanel("Gene Programs",
+    sidebarLayout(
+      sidebarPanel(
+        width = 3,
+        h4("NMF Parameters"),
+        numericInput("nmf_k", "Number of Factors (k)", value = 5, min = 2, max = 20),
+        p(tags$small("Higher k finds more granular programs but takes longer.")),
+        actionButton("run_nmf", "Run NMF", class = "btn-primary btn-block"),
+        hr(),
+        h5("Visualization"),
+        selectInput("nmf_factor", "Select Factor", choices = NULL),
+        sliderInput("nmf_pt_size", "Point Size", min=0.1, max=3, value=1),
+        selectInput("nmf_color", "Color Scale", choices = c("Viridis", "Magma", "Plasma"), selected = "Viridis")
+      ),
+      mainPanel(
+        width = 9,
+        tabsetPanel(
+          tabPanel("Factor Heatmap",
+            br(),
+            plotOutput("nmf_heatmap", height = "600px")
+          ),
+          tabPanel("Factor Scores",
+            br(),
+            plotOutput("nmf_feature_plot", height = "600px")
+          ),
+          tabPanel("Top Genes",
+            br(),
+            DT::DTOutput("nmf_gene_table")
+          )
+        )
+      )
+    )
+  ),
+  
   tabPanel("Differential Expression",
     sidebarLayout(
       sidebarPanel(
@@ -1411,20 +1445,29 @@ server <- function(input, output, session) {
             )
           } else if (ptype == "FeaturePlot") {
             req(feat, red)
-            # FeaturePlot - support viridis palettes
-            use_viridis <- FALSE
-            viridis_pal <- "D"  # Default to standard viridis
+            # FeaturePlot - Enforce viridis for sequential data as requested
+            # We ignore other palettes/manual colors for sequential data in SCpubr mode
+            
+            # Default to 'viridis' (D)
+            viridis_pal <- "D"
+            viridis_dir <- 1 
+            
+            # Check if user selected a specific viridis option
             pal_source <- input[[ns("color_source")]]
             if (!is.null(pal_source) && pal_source == "Palette") {
               pal_name <- input[[ns("palette_name")]]
               if (!is.null(pal_name) && pal_name %in% c("viridis", "magma", "plasma", "inferno", "cividis")) {
-                use_viridis <- TRUE
-                # Map to SCpubr's viridis.palette options (A-E)
-                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E")
-                viridis_pal <- viridis_map[[pal_name]]
+                 # Map to SCpubr's viridis.palette options (A-E)
+                 viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E")
+                 viridis_pal <- viridis_map[[pal_name]]
               }
             }
             
+            # Get direction
+            if (!is.null(input[[ns("scpubr_viridis_dir")]])) {
+               viridis_dir <- as.numeric(input[[ns("scpubr_viridis_dir")]])
+            }
+
             p <- SCpubr::do_FeaturePlot(
               sample = obj,
               features = feat,
@@ -1436,52 +1479,65 @@ server <- function(input, output, session) {
               legend.position = legend_pos,
               raster = ncol(obj) > 50000,
               raster.dpi = raster_dpi,
-              use_viridis = use_viridis,
+              use_viridis = TRUE,
               viridis.palette = viridis_pal,
-              viridis.direction = as.numeric(input[[ns("scpubr_viridis_dir")]])
+              viridis.direction = viridis_dir
             )
           } else if (ptype == "ViolinPlot") {
             req(feat)
+             # ViolinPlot is tricky: can be discrete (if grouped) or just density.
+             # SCpubr::do_ViolinPlot usually uses discrete colors for groups.
+             # We pass 'colors.use' which handles all discrete palettes (Viridis/Brewer/Manual)
+             
             p <- tryCatch({
-              result <- SCpubr::do_ViolinPlot(
+              SCpubr::do_ViolinPlot(
                 sample = obj,
                 features = feat,
                 group.by = grp,
                 split.by = splt,
-                colors.use = colors,
+                colors.use = colors, # This supports the full range of discrete palettes
                 font.size = font_size,
                 legend.position = legend_pos
               )
             }, error = function(e) {
-              ggplot() + annotate("text", x=0, y=0, label=paste("SCpubr Violin Error:", e$message), size=4, color="red") + theme_void()
+               # If it still fails (e.g. package issues), show error but cleaner
+               ggplot() + 
+                 annotate("text", x=0.5, y=0.5, label=paste("SCpubr Violin Error:\n", e$message), size=5, color="red") + 
+                 theme_void() + 
+                 theme(plot.margin = margin(10,10,10,10))
             })
           } else if (ptype == "DotPlot") {
             req(feat)
-            # DotPlot - support viridis palettes
-            use_viridis <- FALSE
-            viridis_pal <- "E"  # Default to cividis
+            # DotPlot is sequential (expression) + discrete (size). 
+            # Enforce viridis for the color scale.
+            
+            viridis_pal <- "E" # Default to cividis or viridis
+            viridis_dir <- 1
+            
             pal_source <- input[[ns("color_source")]]
             if (!is.null(pal_source) && pal_source == "Palette") {
               pal_name <- input[[ns("palette_name")]]
               if (!is.null(pal_name) && pal_name %in% c("viridis", "magma", "plasma", "inferno", "cividis")) {
-                use_viridis <- TRUE
-                # Map to SCpubr's viridis.palette options (A-E)
-                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E")
-                viridis_pal <- viridis_map[[pal_name]]
+                 viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E")
+                 viridis_pal <- viridis_map[[pal_name]]
               }
             }
             
+            if (!is.null(input[[ns("scpubr_viridis_dir")]])) {
+               viridis_dir <- as.numeric(input[[ns("scpubr_viridis_dir")]])
+            }
+            
             p <- tryCatch({
-              result <- SCpubr::do_DotPlot(
+              SCpubr::do_DotPlot(
                 sample = obj,
                 features = feat,
                 group.by = grp,
                 split.by = splt,
                 font.size = font_size,
                 legend.position = legend_pos,
-                use_viridis = use_viridis,
+                use_viridis = TRUE,
                 viridis.palette = viridis_pal,
-                viridis.direction = as.numeric(input[[ns("scpubr_viridis_dir")]])
+                viridis.direction = viridis_dir
               )
             }, error = function(e) {
               # If split.by fails, try without it
@@ -1491,9 +1547,9 @@ server <- function(input, output, session) {
                 group.by = grp,
                 font.size = font_size,
                 legend.position = legend_pos,
-                use_viridis = use_viridis,
+                use_viridis = TRUE,
                 viridis.palette = viridis_pal,
-                viridis.direction = as.numeric(input[[ns("scpubr_viridis_dir")]])
+                viridis.direction = viridis_dir
               )
             })
           }
@@ -1502,20 +1558,36 @@ server <- function(input, output, session) {
           if (!is.null(p)) {
             leg_dir <- if (legend_pos %in% c("bottom", "top")) "horizontal" else "vertical"
             
+            # Define guides based on plot type
+            my_guides <- NULL
             if (ptype == "FeaturePlot") {
-              p <- p + guides(
+              my_guides <- guides(
                 color = guide_colorbar(direction = leg_dir, title.position = "top", order = 1),
                 fill = guide_colorbar(direction = leg_dir, title.position = "top", order = 1)
               )
             } else if (ptype == "ViolinPlot") {
-              p <- p + guides(fill = guide_legend(direction = leg_dir, override.aes = list(size = 4), title.position = "top"))
+              my_guides <- guides(fill = guide_legend(direction = leg_dir, override.aes = list(size = 4), title.position = "top"))
             } else if (ptype == "DimPlot") {
-              p <- p + guides(color = guide_legend(direction = leg_dir, override.aes = list(size = 4), title.position = "top"))
+              my_guides <- guides(color = guide_legend(direction = leg_dir, override.aes = list(size = 4), title.position = "top"))
             } else if (ptype == "DotPlot") {
-              p <- p + guides(
+              my_guides <- guides(
                 color = guide_colorbar(direction = leg_dir, title.position = "top", order = 1),
                 size = guide_legend(direction = leg_dir, title.position = "top", order = 2)
               )
+            }
+            
+            # Apply guides and theme using correct operator based on object class
+            th <- theme(legend.position = legend_pos)
+            
+            if (inherits(p, "patchwork")) {
+              # For patchwork, use & to apply to all parts and ensure guides are collected
+              if (!is.null(my_guides)) p <- p & my_guides
+              p <- p & th
+              p <- p + patchwork::plot_layout(guides = "collect")
+            } else {
+              # For standard ggplot, use +
+              if (!is.null(my_guides)) p <- p + my_guides
+              p <- p + th
             }
           }
           
@@ -1913,6 +1985,103 @@ server <- function(input, output, session) {
       ggsave(file, p, width=input$export_w, height=input$export_h, device=input$export_format)
     }
   )
+  # --- NMF Analysis ---
+  nmf_results <- reactiveValues(model = NULL, feature_loadings = NULL)
+
+  observeEvent(input$run_nmf, {
+    req(seurat_obj())
+    obj <- seurat_obj()
+    
+    # Check dependencies
+    if (!requireNamespace("NMF", quietly = TRUE)) {
+      showNotification("NMF package is not installed.", type="error")
+      return()
+    }
+    
+    withProgress(message = 'Running NMF...', detail = 'Preparing data', value = 0.2, {
+      
+      # NMF requires non-negative data. Use 'data' layer (normalized counts).
+      mat <- GetAssayData(obj, layer = "data")
+      mat <- mat[VariableFeatures(obj), ]
+      
+      # Remove zero rows if any
+      mat <- mat[rowSums(mat) > 0, ]
+      
+      # NMF package requires dense matrix
+      mat <- as.matrix(mat)
+      
+      incProgress(0.3, detail="Computing factorization (this may take a while)...")
+      
+      k <- input$nmf_k
+      res <- NMF::nmf(mat, rank = k, method = "lee", seed = 123456)
+      
+      incProgress(0.8, detail="Processing results...")
+      
+      W <- NMF::basis(res)
+      H <- NMF::coef(res)
+      
+      factor_names <- paste0("Factor_", 1:k)
+      colnames(W) <- factor_names
+      rownames(H) <- factor_names
+      colnames(H) <- colnames(mat)
+      
+      nmf_results$model <- res
+      nmf_results$feature_loadings <- W
+      
+      embeddings <- t(H)
+      rownames(embeddings) <- colnames(mat)
+      colnames(embeddings) <- factor_names
+      
+      obj[["nmf"]] <- CreateDimReducObject(embeddings = embeddings, loadings = W, key = "NMF_", assay = DefaultAssay(obj))
+      
+      seurat_obj(obj)
+      showNotification("NMF Analysis Complete!", type="message")
+      
+      updateSelectInput(session, "nmf_factor", choices = factor_names, selected = factor_names[1])
+    })
+  })
+  
+  output$nmf_heatmap <- renderPlot({
+    req(nmf_results$feature_loadings)
+    W <- nmf_results$feature_loadings
+    top_genes <- unique(as.vector(apply(W, 2, function(x) names(sort(x, decreasing=TRUE))[1:10])))
+    W_sub <- W[top_genes, ]
+    df <- reshape2::melt(W_sub)
+    colnames(df) <- c("Gene", "Factor", "Weight")
+    
+    ggplot(df, aes(x=Factor, y=Gene, fill=Weight)) +
+      geom_tile() +
+      scale_fill_viridis_c(option = "magma") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle=45, hjust=1), axis.text.y = element_text(size=8)) +
+      labs(title = "Gene Programs (Basis Matrix)")
+  })
+  
+  output$nmf_feature_plot <- renderPlot({
+    req(seurat_obj(), input$nmf_factor)
+    obj <- seurat_obj()
+    if (!"nmf" %in% names(obj@reductions)) return(NULL)
+    nmf_data <- Embeddings(obj, "nmf")
+    factor_col <- input$nmf_factor
+    if (!factor_col %in% colnames(nmf_data)) return(NULL)
+    
+    obj$current_factor <- nmf_data[, factor_col]
+    red <- "umap"
+    if (!"umap" %in% Reductions(obj)) red <- "pca"
+    
+    FeaturePlot(obj, features = "current_factor", reduction = red, pt.size = input$nmf_pt_size) +
+      scale_color_viridis_c(option = tolower(input$nmf_color)) +
+      labs(title = paste(factor_col, "Scores"))
+  })
+  
+  output$nmf_gene_table <- DT::renderDT({
+    req(nmf_results$feature_loadings, input$nmf_factor)
+    W <- nmf_results$feature_loadings
+    col <- input$nmf_factor
+    scores <- W[, col]
+    df <- data.frame(Gene = names(sort(scores, decreasing=TRUE)), Weight = round(sort(scores, decreasing=TRUE), 4))
+    DT::datatable(df, options = list(pageLength = 20))
+  })
 }
 
 shinyApp(ui, server)

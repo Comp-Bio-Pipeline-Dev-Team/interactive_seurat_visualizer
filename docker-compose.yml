@@ -8,6 +8,8 @@ services:
     volumes:
       # Mount a directory for uploading Seurat objects
       - ./data:/data
+      # Mount source code for development (Hot-Reloading requires restart but avoids rebuild)
+      - .:/app
     environment:
       - SHINY_LOG_LEVEL=INFO
     restart: unless-stopped
