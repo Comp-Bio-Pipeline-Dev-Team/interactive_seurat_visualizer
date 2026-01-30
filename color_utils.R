@@ -107,11 +107,15 @@ get_manual_colors_from_inputs <- function(input, ns, levels, named = FALSE) {
   if (length(levels) == 0) return(NULL)
   
   colors <- sapply(levels, function(level) {
+    # Build the input ID using the namespace function
     color_input_id <- ns(paste0("col_", level))
     color_value <- input[[color_input_id]]
     
+    # Debug: print what we're looking for
+    cat("Looking for input:", color_input_id, "Value:", color_value, "\n")
+    
     # Return the color if available, otherwise default to gray
-    if (is.null(color_value)) "gray" else color_value
+    if (is.null(color_value) || color_value == "") "gray" else color_value
   })
   
   # Add names if requested
