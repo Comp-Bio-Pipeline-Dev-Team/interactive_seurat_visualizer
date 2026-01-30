@@ -1427,7 +1427,7 @@ server <- function(input, output, session) {
     # Apply final customizations
     if (!is.null(input[[ns("title_size")]])) {
       p <- p + theme(
-        plot.title = element_text(size=input[[ns("title_size")]]), 
+        plot.title = element_text(size=input[[ns("title_size")]], 
                                  hjust=as.numeric(input[[ns("title_align")]]))
       )
     }
