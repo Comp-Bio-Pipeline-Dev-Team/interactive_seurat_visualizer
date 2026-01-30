@@ -12,6 +12,9 @@ library(RColorBrewer)
 library(DT)
 library(ggrepel)
 
+# Load NMF BEFORE BiocGenerics packages to avoid do.call masking
+library(NMF)
+
 # Optional Libraries
 has_ucell <- requireNamespace("UCell", quietly = TRUE)
 has_scpubr <- requireNamespace("SCpubr", quietly = TRUE)
@@ -216,7 +219,15 @@ ui <- navbarPage(
         h5("Visualization"),
         selectInput("nmf_factor", "Select Factor", choices = NULL),
         sliderInput("nmf_pt_size", "Point Size", min=0.1, max=3, value=1),
-        selectInput("nmf_color", "Color Scale", choices = c("Viridis", "Magma", "Plasma"), selected = "Viridis")
+        selectInput("nmf_color", "Color Scale", choices = c("Viridis", "Magma", "Plasma"), selected = "Viridis"),
+        hr(),
+        h5("Export"),
+        selectInput("nmf_export_format", "Format", choices = c("png", "pdf", "jpg"), selected = "png"),
+        numericInput("nmf_export_width", "Width (inches)", value = 10, min = 4, max = 20),
+        numericInput("nmf_export_height", "Height (inches)", value = 8, min = 4, max = 20),
+        downloadButton("download_nmf_heatmap", "Download Heatmap", class = "btn-info btn-block"),
+        downloadButton("download_nmf_featureplot", "Download FeaturePlot", class = "btn-info btn-block"),
+        downloadButton("download_nmf_table", "Download Top Genes CSV", class = "btn-success btn-block")
       ),
       mainPanel(
         width = 9,
@@ -227,10 +238,24 @@ ui <- navbarPage(
           ),
           tabPanel("Factor Scores",
             br(),
+            fluidRow(
+              column(12, 
+                p("Select a factor from the sidebar to visualize its scores on cells.")
+              )
+            ),
             plotOutput("nmf_feature_plot", height = "600px")
+          ),
+          tabPanel("All Factors FeaturePlot",
+            br(),
+            plotOutput("nmf_all_factors_plot", height = "800px")
           ),
           tabPanel("Top Genes",
             br(),
+            fluidRow(
+              column(12,
+                p("Showing top genes for the selected factor. Higher weights indicate genes that define this program.")
+              )
+            ),
             DT::DTOutput("nmf_gene_table")
           )
         )
@@ -1379,6 +1404,9 @@ server <- function(input, output, session) {
       g2 <- input[[ns("cdb_group2")]]
       req(g1, g2)
       
+      # Get colors for the fill variable (g2), not the x-axis
+      colors <- get_colors(id, obj, g2)
+      
       df <- as.data.frame(table(obj@meta.data[[g1]], obj@meta.data[[g2]]))
       colnames(df) <- c("Sample", "Cluster", "Count")
       
@@ -1998,24 +2026,164 @@ server <- function(input, output, session) {
       return()
     }
     
-    withProgress(message = 'Running NMF...', detail = 'Preparing data', value = 0.2, {
+    withProgress(message = 'Running NMF...', detail = 'Preparing data', value = 0.1, {
       
-      # NMF requires non-negative data. Use 'data' layer (normalized counts).
-      mat <- GetAssayData(obj, layer = "data")
+      # NMF requires non-negative data. Use counts (not data which may be log-normalized)
+      # Check if we have variable features - if not, compute them automatically
+      if (length(VariableFeatures(obj)) == 0) {
+        showNotification("No variable features found. Computing automatically...", type = "message", duration = 3)
+        
+        # Clean data layer first by replacing NaN/Inf values
+        data_layer <- GetAssayData(obj, layer = "data")
+        data_layer[is.na(data_layer) | is.infinite(data_layer)] <- 0
+        obj <- SetAssayData(obj, layer = "data", new.data = data_layer)
+        
+        # Now FindVariableFeatures should work
+        obj <- tryCatch({
+          FindVariableFeatures(obj, selection.method = "vst", nfeatures = 2000)
+        }, error = function(e) {
+          showNotification(paste("FindVariableFeatures error:", e$message), type = "warning", duration = 5)
+          obj
+        })
+        
+        # Check if we got variable features
+        if (length(VariableFeatures(obj)) == 0) {
+          showNotification("Using top 2000 expressed genes...", type = "warning", duration = 3)
+          gene_means <- Matrix::rowMeans(data_layer)
+          gene_means[is.na(gene_means) | is.infinite(gene_means)] <- 0
+          top_genes <- names(sort(gene_means, decreasing = TRUE)[1:min(2000, sum(gene_means > 0))])
+          VariableFeatures(obj) <- top_genes
+        }
+        
+        seurat_obj(obj)
+      }
+      
+      # Get RAW counts for NMF (not normalized data)
+      # H5AD conversion may use different layer names
+      mat <- NULL
+      
+      # Try to get raw counts from various possible locations
+      for (layer_name in c("counts.raw", "raw.counts", "counts", "data")) {
+        temp <- tryCatch({
+          GetAssayData(obj, layer = layer_name)
+        }, error = function(e) NULL)
+        
+        if (!is.null(temp) && all(temp >= 0, na.rm = TRUE)) {
+          message("Using layer: ", layer_name)
+          mat <- temp
+          break
+        }
+      }
+      
+      # If still NULL, try accessing raw data directly
+      if (is.null(mat)) {
+        mat <- tryCatch({
+          obj@assays$RNA@layers$counts
+        }, error = function(e) {
+          GetAssayData(obj, layer = "data")
+        })
+      }
+      
       mat <- mat[VariableFeatures(obj), ]
       
-      # Remove zero rows if any
+      # Clean the matrix: replace NaN/Inf with 0, and ensure non-negative
+      mat[is.na(mat) | is.infinite(mat)] <- 0
+      
+      # Check if values are extremely small (normalized/scaled data)
+      # NMF has issues with very small decimal values
+      max_val <- max(mat, na.rm = TRUE)
+      if (max_val > 0 && max_val < 1) {
+        showNotification("Data appears normalized. Scaling up for NMF...", type = "message", duration = 3)
+        # Scale up to reasonable range (multiply by 1000)
+        mat <- mat * 1000
+      }
+      
+      # H5AD files sometimes have negative values even in counts - force non-negative
+      if (any(mat < 0, na.rm = TRUE)) {
+        showNotification("Converting negative values to positive (abs).", type = "warning", duration = 3)
+        mat <- abs(mat)
+      }
+      
+      # Remove zero rows
       mat <- mat[rowSums(mat) > 0, ]
+      
+      # Convert to dense matrix early (sparse matrices can cause issues with NMF)
+      if (inherits(mat, "dgCMatrix") || inherits(mat, "sparseMatrix")) {
+        showNotification("Converting sparse matrix to dense for NMF...", type = "message", duration = 2)
+        mat <- as.matrix(mat)
+      }
+      
+      # Validate matrix after filtering
+      if (nrow(mat) == 0) {
+        showNotification("All genes have zero expression after filtering. Cannot run NMF.", type = "error")
+        return()
+      }
+      
+      if (nrow(mat) < input$nmf_k) {
+        showNotification(paste("Not enough genes (", nrow(mat), ") for", input$nmf_k, "factors. Please reduce k."), type = "error")
+        return()
+      }
+      
+      incProgress(0.2, detail = paste("Processing", nrow(mat), "genes x", ncol(mat), "cells"))
       
       # NMF package requires dense matrix
       mat <- as.matrix(mat)
       
-      incProgress(0.3, detail="Computing factorization (this may take a while)...")
+      # Scale data up if values are too small (prevents numerical issues)
+      # Multiply by 1000 and round to avoid floating point precision issues
+      mat <- round(mat * 1000)
+      
+      # Ensure strictly non-negative after rounding
+      mat[mat < 0] <- 0
+      
+      # Final validation before NMF
+      if (any(is.na(mat))) {
+        showNotification("Matrix contains NA values. Cleaning...", type = "warning", duration = 2)
+        mat[is.na(mat)] <- 0
+      }
+      if (any(is.infinite(mat))) {
+        showNotification("Matrix contains Inf values. Cleaning...", type = "warning", duration = 2)
+        mat[is.infinite(mat)] <- 0
+      }
+      if (any(mat < 0)) {
+        showNotification("Matrix contains negative values. Converting to absolute...", type = "warning", duration = 2)
+        mat <- abs(mat)
+      }
+      
+      incProgress(0.3, detail = paste("Computing", input$nmf_k, "factors (10-20 min)..."))
       
       k <- input$nmf_k
-      res <- NMF::nmf(mat, rank = k, method = "lee", seed = 123456)
+      
+      # Log matrix details for debugging
+      message("=== NMF Debug Info ===")
+      message("Matrix class: ", paste(class(mat), collapse = ", "))
+      message("Matrix type: ", typeof(mat))
+      message("Is matrix: ", is.matrix(mat))
+      message("Dimensions: ", nrow(mat), " x ", ncol(mat))
+      message("Value range: ", min(mat, na.rm = TRUE), " to ", max(mat, na.rm = TRUE))
+      message("k value: ", k)
+      message("method: snmf/l (fast)")
+      message("======================")
+      
+      # Run NMF
+      res <- tryCatch({
+        NMF::nmf(mat, rank = k, method = "snmf/l", seed = 123456)
+      }, error = function(e) {
+        showNotification(paste("NMF error:", e$message), type = "error", duration = 10)
+        message("NMF failed with error: ", e$message)
+        message("Matrix dimensions: ", nrow(mat), " x ", ncol(mat))
+        message("Matrix range: ", min(mat, na.rm = TRUE), " to ", max(mat, na.rm = TRUE))
+        message("k value: ", k)
+        return(NULL)
+      })
       
       incProgress(0.8, detail="Processing results...")
+      
+      # Check if NMF succeeded
+      if (is.null(res)) {
+        showNotification("NMF computation failed. Check console for details.", type = "error", duration = 10)
+        return()
+      }
       
       W <- NMF::basis(res)
       H <- NMF::coef(res)
@@ -2060,10 +2228,23 @@ server <- function(input, output, session) {
   output$nmf_feature_plot <- renderPlot({
     req(seurat_obj(), input$nmf_factor)
     obj <- seurat_obj()
-    if (!"nmf" %in% names(obj@reductions)) return(NULL)
+    
+    # Check if NMF has been run
+    if (!"nmf" %in% names(obj@reductions)) {
+      plot.new()
+      text(0.5, 0.5, "Run NMF first to see factor scores.", cex = 1.5)
+      return()
+    }
+    
     nmf_data <- Embeddings(obj, "nmf")
     factor_col <- input$nmf_factor
-    if (!factor_col %in% colnames(nmf_data)) return(NULL)
+    
+    # Validate factor exists
+    if (is.null(factor_col) || !factor_col %in% colnames(nmf_data)) {
+      plot.new()
+      text(0.5, 0.5, "Select a factor from the sidebar.", cex = 1.5)
+      return()
+    }
     
     obj$current_factor <- nmf_data[, factor_col]
     red <- "umap"
@@ -2079,9 +2260,153 @@ server <- function(input, output, session) {
     W <- nmf_results$feature_loadings
     col <- input$nmf_factor
     scores <- W[, col]
-    df <- data.frame(Gene = names(sort(scores, decreasing=TRUE)), Weight = round(sort(scores, decreasing=TRUE), 4))
-    DT::datatable(df, options = list(pageLength = 20))
+    sorted_scores <- sort(scores, decreasing=TRUE)
+    
+    # Show top 50 genes for the selected factor
+    top_n <- min(50, length(sorted_scores))
+    df <- data.frame(
+      Rank = 1:top_n,
+      Gene = names(sorted_scores)[1:top_n], 
+      Weight = round(sorted_scores[1:top_n], 4),
+      stringsAsFactors = FALSE
+    )
+    
+    DT::datatable(df, 
+      options = list(
+        pageLength = 20,
+        dom = 'ftip',
+        ordering = TRUE
+      ),
+      rownames = FALSE,
+      caption = paste("Top genes defining", col)
+    )
   })
+  
+  # New: Multi-factor FeaturePlot
+  output$nmf_all_factors_plot <- renderPlot({
+    req(seurat_obj())
+    obj <- seurat_obj()
+    if (!"nmf" %in% names(obj@reductions)) {
+      return(NULL)
+    }
+    
+    nmf_data <- Embeddings(obj, "nmf")
+    factors <- colnames(nmf_data)
+    
+    # Add all factors to metadata for plotting
+    for (f in factors) {
+      obj@meta.data[[f]] <- nmf_data[, f]
+    }
+    
+    # Determine reduction
+    red <- if ("umap" %in% Reductions(obj)) "umap" else "pca"
+    
+    # Create multi-panel FeaturePlot
+    ncols <- ceiling(sqrt(length(factors)))
+    
+    # Use SCpubr if available, otherwise standard Seurat
+    if (has_scpubr) {
+      SCpubr::do_FeaturePlot(obj, features = factors, 
+                            reduction = red,
+                            pt.size = input$nmf_pt_size,
+                            ncol = ncols,
+                            legend.position = "bottom")
+    } else {
+      FeaturePlot(obj, features = factors, 
+                 reduction = red,
+                 pt.size = input$nmf_pt_size,
+                 ncol = ncols) &
+        scale_color_viridis_c(option = tolower(input$nmf_color))
+    }
+  })
+  
+  # Export handlers
+  nmf_heatmap_plot <- reactive({
+    req(nmf_results$feature_loadings)
+    W <- nmf_results$feature_loadings
+    top_genes <- unique(as.vector(apply(W, 2, function(x) names(sort(x, decreasing=TRUE))[1:10])))
+    W_sub <- W[top_genes, ]
+    df <- reshape2::melt(W_sub)
+    colnames(df) <- c("Gene", "Factor", "Weight")
+    
+    ggplot(df, aes(x=Factor, y=Gene, fill=Weight)) +
+      geom_tile() +
+      scale_fill_viridis_c(option = "magma") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle=45, hjust=1), axis.text.y = element_text(size=8)) +
+      labs(title = "Gene Programs (Basis Matrix)")
+  })
+  
+  output$download_nmf_heatmap <- downloadHandler(
+    filename = function() {
+      paste0("NMF_Heatmap_", Sys.Date(), ".", input$nmf_export_format)
+    },
+    content = function(file) {
+      req(nmf_heatmap_plot())
+      ggsave(file, nmf_heatmap_plot(),
+             width = input$nmf_export_width,
+             height = input$nmf_export_height,
+             device = input$nmf_export_format)
+    }
+  )
+  
+  nmf_featureplot_reactive <- reactive({
+    req(seurat_obj())
+    obj <- seurat_obj()
+    if (!"nmf" %in% names(obj@reductions)) return(NULL)
+    
+    nmf_data <- Embeddings(obj, "nmf")
+    factors <- colnames(nmf_data)
+    
+    for (f in factors) {
+      obj@meta.data[[f]] <- nmf_data[, f]
+    }
+    
+    red <- if ("umap" %in% Reductions(obj)) "umap" else "pca"
+    ncols <- ceiling(sqrt(length(factors)))
+    
+    if (has_scpubr) {
+      SCpubr::do_FeaturePlot(obj, features = factors, 
+                            reduction = red,
+                            pt.size = input$nmf_pt_size,
+                            ncol = ncols,
+                            legend.position = "bottom")
+    } else {
+      FeaturePlot(obj, features = factors, 
+                 reduction = red,
+                 pt.size = input$nmf_pt_size,
+                 ncol = ncols) &
+        scale_color_viridis_c(option = tolower(input$nmf_color))
+    }
+  })
+  
+  output$download_nmf_featureplot <- downloadHandler(
+    filename = function() {
+      paste0("NMF_FeaturePlot_AllFactors_", Sys.Date(), ".", input$nmf_export_format)
+    },
+    content = function(file) {
+      req(nmf_featureplot_reactive())
+      ggsave(file, nmf_featureplot_reactive(),
+             width = input$nmf_export_width,
+             height = input$nmf_export_height,
+             device = input$nmf_export_format)
+    }
+  )
+  
+  output$download_nmf_table <- downloadHandler(
+    filename = function() {
+      paste0("NMF_TopGenes_", input$nmf_factor, "_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      req(nmf_results$feature_loadings, input$nmf_factor)
+      W <- nmf_results$feature_loadings
+      col <- input$nmf_factor
+      scores <- W[, col]
+      df <- data.frame(Gene = names(sort(scores, decreasing=TRUE)), 
+                      Weight = sort(scores, decreasing=TRUE))
+      write.csv(df, file, row.names = FALSE)
+    }
+  )
 }
 
 shinyApp(ui, server)
