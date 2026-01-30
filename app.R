@@ -30,9 +30,13 @@ if (has_enrichment) {
 
 options(shiny.maxRequestSize = 10000 * 1024^2)
 
-# --- Load Utility Modules ---
+# ---# Source utility modules
 source("color_utils.R")
 source("plot_cluster_distribution.R")
+source("plot_dimension_reduction.R")
+source("plot_feature.R")
+source("plot_violin.R")
+source("plot_dot.R")
 
 # --- UI Helper ---
 plotControlUI <- function(id) {
@@ -1272,255 +1276,161 @@ server <- function(input, output, session) {
   }
   
   # --- Plot Generator ---
+  # --- Plot Generator (Refactored to use modular functions) ---
   generate_plot <- function(id, obj) {
     ns <- function(x) paste0(id, "-", x)
     ptype <- input[[ns("plot_type")]]
     req(ptype)
     
-    red <- input[[ns("reduction")]]
-    feat <- input[[ns("feature")]]
-    grp <- input[[ns("group_by")]]
-    splt <- input[[ns("split_by")]]
+    # Get common parameters
+    pt_size <- input[[ns("pt_size")]]
+    if (is.null(pt_size)) pt_size <- 1
     
-    if (!is.null(grp) && grp == "Default") grp <- NULL
-    if (!is.null(splt) && splt == "None") splt <- NULL
+    title <- input[[ns("custom_title")]]
+    show_legend <- input[[ns("show_legend")]]
+    if (is.null(show_legend)) show_legend <- TRUE
+    
+    flip <- input[[ns("flip_coords")]]
+    if (is.null(flip)) flip <- FALSE
+    
+    # Get assay and layer for expression-based plots
+    assay <- input[[ns("assay")]]
+    if (is.null(assay)) assay <- "RNA"
+    
+    layer <- input[[ns("layer")]]
+    if (is.null(layer)) layer <- "data"
     
     # Determine the correct grouping variable for color retrieval
-    # For ClusterDistrBar, use cdb_group2 (fill variable) instead of group_by
-    color_group_var <- grp
+    color_group_var <- input[[ns("group_by")]]
     if (ptype == "ClusterDistrBar") {
       color_group_var <- input[[ns("cdb_group2")]]
     }
     
+    # Get colors using unified color system
     colors <- get_colors(id, obj, if(is.null(color_group_var)) "Default" else color_group_var)
-    # For SCpubr, get named colors
-    style <- input[[ns("plot_style")]]
-    if (!is.null(style) && style == "SCpubr") {
-      colors <- get_colors(id, obj, if(is.null(color_group_var)) "Default" else color_group_var, for_scpubr = TRUE)
-    }
-    pt_size <- input[[ns("pt_size")]]
-    if (is.null(pt_size)) pt_size <- 1  # Default if not set
     
+    # Dispatch to appropriate plotting module
     p <- NULL
     
     if (ptype == "ClusterDistrBar") {
-      # Use modular plotting function
+      # ClusterDistrBar module
       params <- validate_cluster_distribution_params(input, ns, obj)
-      
       if (!is.null(params)) {
         p <- plot_cluster_distribution(
           obj = obj,
           group1 = params$group1,
           group2 = params$group2,
           colors = colors,
-          flip = isTRUE(params$flip),
+          flip = flip,
           show_counts = isTRUE(params$show_counts),
           count_size = if(is.null(params$count_size)) 3 else params$count_size,
-          title = params$title,
-          title_size = if(is.null(params$title_size)) 16 else params$title_size,
-          show_legend = isTRUE(params$show_legend)
+          title = if(isTruthy(title)) title else NULL,
+          title_size = input[[ns("title_size")]],
+          show_legend = show_legend
         )
       }
       
-    } else {
-      # Continuous colors for FeaturePlot
-      cols_cont <- if(!is.null(colors) && length(colors) >= 2) c(colors[1], colors[length(colors)]) else NULL
+    } else if (ptype == "DimPlot") {
+      # DimPlot module
+      params <- validate_dimension_reduction_params(input, ns, obj)
+      if (!is.null(params)) {
+        p <- plot_dimension_reduction(
+          obj = obj,
+          reduction = params$reduction,
+          group_by = params$group_by,
+          split_by = params$split_by,
+          colors = colors,
+          pt_size = pt_size,
+          title = if(isTruthy(title)) title else NULL,
+          show_legend = show_legend,
+          flip = flip
+        )
+      }
       
-      # Get plot style
-      style <- input[[ns("plot_style")]]
-      if (is.null(style)) style <- "Standard"
-      
-      # SCpubr plotting
-      if (style == "SCpubr" && has_scpubr) {
-        # Get SCpubr settings
-        font_size <- input[[ns("scpubr_font_size")]]
-        if (is.null(font_size)) font_size <- 14
-        border <- input[[ns("scpubr_border")]]
-        if (is.null(border)) border <- TRUE
-        legend_pos <- input[[ns("scpubr_legend_pos")]]
-        if (is.null(legend_pos)) legend_pos <- "bottom"  # SCpubr default
-        raster_dpi <- input[[ns("scpubr_raster_dpi")]]
-        if (is.null(raster_dpi)) raster_dpi <- 2048  # SCpubr default
-        
-        tryCatch({
-          if (ptype == "DimPlot") {
-            req(red)
-            p <- SCpubr::do_DimPlot(
-              sample = obj,
-              reduction = red,
-              group.by = grp,
-              split.by = splt,
-              colors.use = colors,
-              pt.size = pt_size,
-              font.size = font_size,
-              plot_cell_borders = border,
-              legend.position = legend_pos,
-              raster = ncol(obj) > 50000,
-              raster.dpi = raster_dpi
-            )
-          } else if (ptype == "FeaturePlot") {
-            req(feat, red)
-            # FeaturePlot - support viridis palettes
-            use_viridis <- FALSE
-            viridis_pal <- "D"  # Default to standard viridis
-            pal_source <- input[[ns("color_source")]]
-            if (!is.null(pal_source) && pal_source == "Palette") {
-              pal_name <- input[[ns("palette_name")]]
-              if (!is.null(pal_name) && pal_name %in% c("viridis", "magma", "plasma", "inferno", "cividis")) {
-                use_viridis <- TRUE
-                # Map to SCpubr's viridis.palette options (A-E)
-                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E")
-                viridis_pal <- viridis_map[[pal_name]]
-              }
-            }
-            
-            p <- SCpubr::do_FeaturePlot(
-              sample = obj,
-              features = feat,
-              reduction = red,
-              split.by = splt,
-              pt.size = pt_size,
-              font.size = font_size,
-              plot_cell_borders = border,
-              legend.position = legend_pos,
-              raster = ncol(obj) > 50000,
-              raster.dpi = raster_dpi,
-              use_viridis = use_viridis,
-              viridis.palette = viridis_pal,
-              viridis.direction = as.numeric(input[[ns("scpubr_viridis_dir")]])
-            )
-          } else if (ptype == "ViolinPlot") {
-            req(feat)
-            p <- tryCatch({
-              result <- SCpubr::do_ViolinPlot(
-                sample = obj,
-                features = feat,
-                group.by = grp,
-                split.by = splt,
-                colors.use = colors,
-                font.size = font_size,
-                legend.position = legend_pos
-              )
-            }, error = function(e) {
-              ggplot() + annotate("text", x=0, y=0, label=paste("SCpubr Violin Error:", e$message), size=4, color="red") + theme_void()
-            })
-          } else if (ptype == "DotPlot") {
-            req(feat)
-            # DotPlot - support viridis palettes
-            use_viridis <- FALSE
-            viridis_pal <- "E"  # Default to cividis
-            pal_source <- input[[ns("color_source")]]
-            if (!is.null(pal_source) && pal_source == "Palette") {
-              pal_name <- input[[ns("palette_name")]]
-              if (!is.null(pal_name) && pal_name %in% c("viridis", "magma", "plasma", "inferno", "cividis")) {
-                use_viridis <- TRUE
-                # Map to SCpubr's viridis.palette options (A-E)
-                viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E")
-                viridis_pal <- viridis_map[[pal_name]]
-              }
-            }
-            
-            p <- tryCatch({
-              result <- SCpubr::do_DotPlot(
-                sample = obj,
-                features = feat,
-                group.by = grp,
-                split.by = splt,
-                font.size = font_size,
-                legend.position = legend_pos,
-                use_viridis = use_viridis,
-                viridis.palette = viridis_pal,
-                viridis.direction = as.numeric(input[[ns("scpubr_viridis_dir")]])
-              )
-            }, error = function(e) {
-              # If split.by fails, try without it
-              result <- SCpubr::do_DotPlot(
-                sample = obj,
-                features = feat,
-                group.by = grp,
-                font.size = font_size,
-                legend.position = legend_pos,
-                use_viridis = use_viridis,
-                viridis.palette = viridis_pal,
-                viridis.direction = as.numeric(input[[ns("scpubr_viridis_dir")]])
-              )
-            })
-          }
-          
-          # Fix SCpubr Legend Orientation
-          if (!is.null(p)) {
-            leg_dir <- if (legend_pos %in% c("bottom", "top")) "horizontal" else "vertical"
-            
-            if (ptype == "FeaturePlot") {
-              p <- p + guides(
-                color = guide_colorbar(direction = leg_dir, title.position = "top", order = 1),
-                fill = guide_colorbar(direction = leg_dir, title.position = "top", order = 1)
-              )
-            } else if (ptype == "ViolinPlot") {
-              p <- p + guides(fill = guide_legend(direction = leg_dir, override.aes = list(size = 4), title.position = "top"))
-            } else if (ptype == "DimPlot") {
-              p <- p + guides(color = guide_legend(direction = leg_dir, override.aes = list(size = 4), title.position = "top"))
-            } else if (ptype == "DotPlot") {
-              p <- p + guides(
-                color = guide_colorbar(direction = leg_dir, title.position = "top", order = 1),
-                size = guide_legend(direction = leg_dir, title.position = "top", order = 2)
-              )
-            }
-          }
-          
-        }, error = function(e) {
-          # Fallback to standard if SCpubr fails
-          p <<- ggplot() + annotate("text", x=0, y=0, label=paste("SCpubr error:", e$message), size=4, color="red") + theme_void()
-        })
-        
-      } else {
-        # Standard Seurat plotting
-        if (ptype == "DimPlot") {
-          req(red)  # Must have reduction
-          p <- DimPlot(obj, reduction=red, group.by=grp, split.by=splt, cols=colors, pt.size=pt_size)
-        } else if (ptype == "FeaturePlot") {
-          req(feat, red)  # Must have feature AND reduction
-          # Only pass cols if not NULL - let Seurat use default gradient otherwise
-          if (!is.null(cols_cont)) {
-            p <- FeaturePlot(obj, features=feat, reduction=red, split.by=splt, pt.size=pt_size, cols=cols_cont)
-          } else {
-            p <- FeaturePlot(obj, features=feat, reduction=red, split.by=splt, pt.size=pt_size)
-          }
-        } else if (ptype == "ViolinPlot") {
-          req(feat)  # Must have feature
-          p <- VlnPlot(obj, features=feat, group.by=grp, split.by=splt, cols=colors, pt.size=pt_size)
-        } else if (ptype == "DotPlot") {
-          req(feat)  # Must have feature(s)
-          feats <- feat
-          
-          if (!is.null(cols_cont)) {
-            p <- DotPlot(obj, features=feats, group.by=grp, split.by=splt, cols=cols_cont)
-          } else {
-            p <- DotPlot(obj, features=feats, group.by=grp, split.by=splt)
-          }
+    } else if (ptype == "FeaturePlot") {
+      # FeaturePlot module
+      params <- validate_feature_plot_params(input, ns, obj)
+      if (!is.null(params)) {
+        # For continuous scales, use first and last color if available
+        feat_colors <- if(!is.null(colors) && length(colors) >= 2) {
+          c(colors[1], colors[length(colors)])
+        } else {
+          NULL
         }
+        
+        p <- plot_feature(
+          obj = obj,
+          features = params$features,
+          reduction = params$reduction,
+          split_by = params$split_by,
+          assay = assay,
+          layer = layer,
+          colors = feat_colors,
+          pt_size = pt_size,
+          title = if(isTruthy(title)) title else NULL,
+          show_legend = show_legend
+        )
+      }
+      
+    } else if (ptype == "ViolinPlot") {
+      # ViolinPlot module
+      params <- validate_violin_plot_params(input, ns, obj)
+      if (!is.null(params)) {
+        p <- plot_violin(
+          obj = obj,
+          features = params$features,
+          group_by = params$group_by,
+          split_by = params$split_by,
+          assay = assay,
+          layer = layer,
+          colors = colors,
+          pt_size = pt_size,
+          title = if(isTruthy(title)) title else NULL,
+          show_legend = show_legend,
+          flip = flip
+        )
+      }
+      
+    } else if (ptype == "DotPlot") {
+      # DotPlot module
+      params <- validate_dot_plot_params(input, ns, obj)
+      if (!is.null(params)) {
+        # For continuous scales, use first and last color if available
+        dot_colors <- if(!is.null(colors) && length(colors) >= 2) {
+          c(colors[1], colors[length(colors)])
+        } else {
+          NULL
+        }
+        
+        p <- plot_dot(
+          obj = obj,
+          features = params$features,
+          group_by = params$group_by,
+          assay = assay,
+          layer = layer,
+          scale_expression = params$scale_expression,
+          colors = dot_colors,
+          title = if(isTruthy(title)) title else NULL,
+          show_legend = show_legend,
+          flip = flip
+        )
       }
     }
     
     # If p is still NULL, return a message
     if (is.null(p)) {
-      return(ggplot() + annotate("text", x=0, y=0, label="Please configure plot settings", size=5, color="gray50") + theme_void())
+      return(ggplot() + annotate("text", x=0, y=0, 
+                                label="Please configure plot settings", 
+                                size=5, color="gray50") + theme_void())
     }
     
-    # Customization
-    title <- input[[ns("custom_title")]]
-    if(isTruthy(title)) p <- p + ggtitle(title)
-    
-    # Flip coordinates if requested
-    flip <- input[[ns("flip_coords")]]
-    if (!is.null(flip) && flip && ptype %in% c("DotPlot", "ViolinPlot", "ClusterDistrBar")) {
-      p <- p + coord_flip()
+    # Apply final customizations
+    if (!is.null(input[[ns("title_size")]])) {
+      p <- p + theme(
+        plot.title = element_text(size=input[[ns("title_size")]]), 
+                                 hjust=as.numeric(input[[ns("title_align")]]))
+      )
     }
-    
-    p <- p + theme(
-      plot.title = element_text(size=input[[ns("title_size")]], hjust=as.numeric(input[[ns("title_align")]])),
-      legend.position = if(input[[ns("show_legend")]]) "right" else "none"
-    )
     
     return(p)
   }
@@ -1534,6 +1444,7 @@ server <- function(input, output, session) {
       ptype <- input[[ns("plot_type")]]
       reds <- names(seurat_obj()@reductions)
       metas <- c("Default", names(seurat_obj()@meta.data))
+      assays <- names(seurat_obj()@assays)
       
       # Get all features (genes + metadata for UCell)
       all_features <- c(rownames(seurat_obj()), colnames(seurat_obj()@meta.data))
@@ -1548,6 +1459,26 @@ server <- function(input, output, session) {
           if(ptype %in% c("DimPlot","FeaturePlot")) selectInput(ns("reduction"), "Reduction", choices=reds),
           if(ptype %in% c("DimPlot","ViolinPlot","DotPlot")) selectInput(ns("group_by"), "Group By", choices=metas),
           selectInput(ns("split_by"), "Split By", choices=c("None", metas[-1])),
+          
+          # Assay and Layer selection for plots that use expression data
+          if(ptype %in% c("FeaturePlot","ViolinPlot","DotPlot")) tagList(
+            hr(),
+            h5("Data Selection"),
+            selectInput(ns("assay"), "Assay", choices=assays, selected="RNA"),
+            selectInput(ns("layer"), "Layer", 
+                       choices=c("counts", "data", "scale.data"), 
+                       selected="data")
+          ),
+          
+          # DotPlot-specific scaling option
+          if(ptype == "DotPlot") tagList(
+            radioButtons(ns("dot_scale"), "Expression Scale", 
+                        choices=c("Average"="average", "Z-score"="z-score"),
+                        selected="average",
+                        inline=TRUE)
+          ),
+          
+          # Feature selection
           if(ptype == "DotPlot")
             selectizeInput(ns("feature"), "Features (select multiple)", choices=NULL, multiple=TRUE, options=list(
               placeholder = 'Type to search and select multiple genes...',

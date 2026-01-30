@@ -40,6 +40,10 @@ RUN R -e "remotes::install_github('enblacar/SCpubr')"
 COPY app.R /app/
 COPY color_utils.R /app/
 COPY plot_cluster_distribution.R /app/
+COPY plot_dimension_reduction.R /app/
+COPY plot_feature.R /app/
+COPY plot_violin.R /app/
+COPY plot_dot.R /app/
 COPY setup.R /app/
 COPY generate_dummy_seurat.R /app/
 COPY README.md /app/
