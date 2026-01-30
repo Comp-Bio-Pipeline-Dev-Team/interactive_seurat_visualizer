@@ -15,8 +15,18 @@ library(ggrepel)
 # Optional Libraries
 has_ucell <- requireNamespace("UCell", quietly = TRUE)
 has_scpubr <- requireNamespace("SCpubr", quietly = TRUE)
+has_enrichment <- requireNamespace("clusterProfiler", quietly = TRUE) && 
+                  requireNamespace("enrichplot", quietly = TRUE)
 if (has_ucell) library(UCell)
 if (has_scpubr) library(SCpubr)
+if (has_enrichment) {
+  library(clusterProfiler)
+  library(enrichplot)
+  library(fgsea)
+  library(msigdbr)
+  library(DOSE)
+  library(igraph)
+}
 
 options(shiny.maxRequestSize = 10000 * 1024^2)
 
@@ -93,7 +103,10 @@ ui <- navbarPage(
   sidebarLayout(
     sidebarPanel(
       width = 3,
-      fileInput("seurat_file", "Upload Seurat (.rds)", accept = c(".rds")),
+      fileInput("seurat_file", "Upload Seurat (.rds or .h5ad)", accept = c(".rds", ".h5ad")),
+      radioButtons("ensembl_species", "Species", choices = c("Human", "Mouse"), inline = TRUE),
+      actionButton("convert_ensembl", "Convert Ensembl IDs to Symbols", icon = icon("dna"), class = "btn-info btn-block"),
+      br(),
       
       # JavaScript to highlight active plot and switch tabs
       tags$script(HTML("
@@ -205,9 +218,22 @@ ui <- navbarPage(
         hr(),
         numericInput("de_logfc", "LogFC Threshold", value = 0.25, min = 0, max = 5, step = 0.05),
         numericInput("de_minpct", "Min Pct", value = 0.1, min = 0, max = 1, step = 0.05),
+        numericInput("de_pval", "P-value Threshold", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
         selectInput("de_test", "Test Type", choices = c("wilcox", "t-test", "roc", "LR"), selected = "wilcox"),
         br(),
         actionButton("run_de", "Run Differential Expression", class="btn-primary btn-block"),
+        hr(),
+        h5("Volcano Plot Settings"),
+        sliderInput("volcano_pt_size", "Point Size", min = 0.5, max = 5, value = 2, step = 0.5),
+        sliderInput("volcano_alpha", "Point Transparency", min = 0.1, max = 1, value = 0.6, step = 0.1),
+        colourInput("volcano_sig_color", "Significant Color", value = "#E74C3C"),
+        colourInput("volcano_nonsig_color", "Non-significant Color", value = "#95A5A6"),
+        hr(),
+        h5("Export"),
+        selectInput("volcano_format", "Format", choices = c("png", "pdf", "jpg"), selected = "png"),
+        numericInput("volcano_width", "Width (inches)", value = 10, min = 4, max = 20),
+        numericInput("volcano_height", "Height (inches)", value = 8, min = 4, max = 20),
+        downloadButton("download_volcano", "Download Volcano Plot", class="btn-info btn-block"),
         hr(),
         downloadButton("download_de", "Download CSV", class="btn-success btn-block")
       ),
@@ -223,6 +249,92 @@ ui <- navbarPage(
             plotlyOutput("de_volcano", height = "600px")
           )
         )
+      )
+    )
+  ),
+  
+  tabPanel("Pathway Enrichment",
+    sidebarLayout(
+      sidebarPanel(
+        width = 3,
+        h4("Enrichment Analysis"),
+        
+        radioButtons("enrich_source", "Input Source",
+                     choices = c("From DE Results" = "de", "Custom Gene List" = "custom"),
+                     selected = "de"),
+        
+        conditionalPanel(
+          condition = "input.enrich_source == 'custom'",
+          textAreaInput("enrich_genes", "Gene List (one per line)", 
+                       rows = 5, placeholder = "CD3D\nCD4\nCD8A\n...")
+        ),
+        
+        hr(),
+        h5("Analysis Settings"),
+        
+        selectInput("enrich_type", "Analysis Type",
+                   choices = c("Over-Representation (ORA)" = "ora", 
+                              "Gene Set Enrichment (GSEA)" = "gsea"),
+                   selected = "ora"),
+        
+        conditionalPanel(
+          condition = "input.enrich_type == 'ora' && input.enrich_source == 'de'",
+          selectInput("enrich_gene_direction", "Gene Direction",
+                     choices = c("All Significant Genes" = "all",
+                                "Upregulated Only (positive log2FC)" = "up",
+                                "Downregulated Only (negative log2FC)" = "down"),
+                     selected = "all")
+        ),
+        
+        selectInput("enrich_database", "Database",
+                   choices = c("MSigDB Hallmarks" = "hallmark",
+                              "GO Biological Process" = "go_bp",
+                              "GO Molecular Function" = "go_mf",
+                              "GO Cellular Component" = "go_cc",
+                              "KEGG" = "kegg",
+                              "Reactome" = "reactome"),
+                   selected = "hallmark"),
+        
+        selectInput("enrich_organism", "Organism",
+                   choices = c("Human" = "human", "Mouse" = "mouse"),
+                   selected = "human"),
+        
+        hr(),
+        h5("Parameters"),
+        
+        numericInput("enrich_pval", "P-value Cutoff", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
+        numericInput("enrich_qval", "Q-value Cutoff", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
+        numericInput("enrich_minsize", "Min Gene Set Size", value = 10, min = 5, max = 100),
+        numericInput("enrich_maxsize", "Max Gene Set Size", value = 500, min = 100, max = 2000),
+        
+        br(),
+        actionButton("run_enrichment", "Run Enrichment Analysis", class="btn-primary btn-block"),
+        
+        hr(),
+        h5("Export Results"),
+        downloadButton("download_enrichment", "Download Results (CSV)", class="btn-success btn-block"),
+        
+        hr(),
+        h5("Export Plots"),
+        selectInput("enrich_plot_format", "Format", choices = c("png", "pdf", "jpg"), selected = "png"),
+        numericInput("enrich_plot_width", "Width (inches)", value = 10, min = 4, max = 20),
+        numericInput("enrich_plot_height", "Height (inches)", value = 8, min = 4, max = 20),
+        
+        conditionalPanel(
+          condition = "input.enrich_type == 'ora'",
+          downloadButton("download_enrichment_dotplot", "Download Dot Plot", class="btn-info btn-block"),
+          downloadButton("download_enrichment_barplot", "Download Bar Plot", class="btn-info btn-block"),
+          downloadButton("download_enrichment_network", "Download Network Plot", class="btn-info btn-block")
+        ),
+        
+        conditionalPanel(
+          condition = "input.enrich_type == 'gsea'",
+          downloadButton("download_enrichment_gsea", "Download GSEA Curves", class="btn-info btn-block")
+        )
+      ),
+      mainPanel(
+        width = 9,
+        uiOutput("enrichment_plots_ui")
       )
     )
   ),
@@ -289,11 +401,190 @@ server <- function(input, output, session) {
   observeEvent(input$seurat_file, {
     req(input$seurat_file)
     tryCatch({
-      obj <- readRDS(input$seurat_file$datapath)
+      path <- input$seurat_file$datapath
+      ext <- tolower(tools::file_ext(input$seurat_file$name))
+      
+      obj <- NULL
+      if (ext == "rds") {
+        obj <- readRDS(path)
+      } else if (ext == "h5ad") {
+        # Strategy 1: SeuratDisk (Fast, but fragile)
+        if (requireNamespace("SeuratDisk", quietly = TRUE)) {
+          showNotification("Attempting conversion with SeuratDisk...", type="message", duration=5)
+          dest <- paste0(path, ".h5seurat")
+          tryCatch({
+            SeuratDisk::Convert(path, dest = dest, overwrite = TRUE)
+            obj <- SeuratDisk::LoadH5Seurat(dest)
+          }, error = function(e) {
+            showNotification(paste("SeuratDisk failed:", e$message, "Trying fallback..."), type="warning")
+            obj <<- NULL # Signal failure to fallback
+          }, finally = {
+            if(file.exists(dest)) unlink(dest)
+          })
+        }
+        
+        # Strategy 2: Zellkonverter (Robust, but requires Python env setup)
+        if (is.null(obj)) {
+          if (requireNamespace("zellkonverter", quietly = TRUE) && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+            showNotification("Attempting conversion with zellkonverter (this may take a while first time)...", type="message", duration=10)
+            tryCatch({
+              sce <- zellkonverter::readH5AD(path)
+              obj <- as.Seurat(sce, counts = "X", data = "X")
+            }, error = function(e) {
+              stop(paste("All loading methods failed. Zellkonverter error:", e$message))
+            })
+          } else {
+            stop("SeuratDisk failed and zellkonverter is not installed for fallback.")
+          }
+        }
+      } else {
+        stop("Unsupported file extension")
+      }
+      
+      # --- Seurat Object Normalization ---
+      # Fix Assay Names (zellkonverter often uses 'originalexp')
+      if ("originalexp" %in% Assays(obj) && !"RNA" %in% Assays(obj)) {
+        obj <- RenameAssays(obj, originalexp = "RNA")
+      }
+      # If 'RNA' is still not default (e.g. it was 'Spatial' or something else), force it if 'RNA' exists
+      if ("RNA" %in% Assays(obj)) {
+        DefaultAssay(obj) <- "RNA"
+      }
+      
+      # Fix Reduction Names (zellkonverter often uses 'X_umap', 'X_pca')
+      for (red in names(obj@reductions)) {
+        if (red == "X_umap") {
+          obj@reductions$umap <- obj@reductions$X_umap
+          obj@reductions$X_umap <- NULL
+          Key(obj@reductions$umap) <- "umap_"
+        } else if (red == "X_pca") {
+          obj@reductions$pca <- obj@reductions$X_pca
+          obj@reductions$X_pca <- NULL
+          Key(obj@reductions$pca) <- "PC_"
+        } else if (red == "X_tsne") {
+          obj@reductions$tsne <- obj@reductions$X_tsne
+          obj@reductions$X_tsne <- NULL
+          Key(obj@reductions$tsne) <- "tSNE_"
+        }
+      }
+      # -----------------------------------
+      
       original_obj(obj)
       seurat_obj(obj)
       showNotification("Loaded successfully!", type="message", duration=3)
     }, error = function(e) showNotification(paste("Error:", e$message), type="error"))
+  })
+  
+  # --- Convert Ensembl IDs ---
+  observeEvent(input$convert_ensembl, {
+    req(seurat_obj())
+    
+    species <- input$ensembl_species
+    db_pkg <- if(species == "Human") "org.Hs.eg.db" else "org.Mm.eg.db"
+    
+    if (!requireNamespace(db_pkg, quietly = TRUE)) {
+      showNotification(paste(db_pkg, "is not installed."), type="error")
+      return()
+    }
+    if (!requireNamespace("AnnotationDbi", quietly = TRUE)) {
+      showNotification("AnnotationDbi is not installed.", type="error")
+      return()
+    }
+    
+    # Load the package dynamically
+    library(db_pkg, character.only = TRUE)
+    # Get the db object (usually named same as package)
+    org_db <- get(db_pkg)
+    
+    withProgress(message = "Converting IDs...", value = 0, {
+      tryCatch({
+        obj <- seurat_obj()
+        # Get current feature names
+        current_ids <- rownames(obj)
+        
+        # Map IDs
+        incProgress(0.2, detail = paste("Mapping", species, "Ensembl to Symbols"))
+        mapped_symbols <- AnnotationDbi::mapIds(
+          org_db,
+          keys = current_ids,
+          column = "SYMBOL",
+          keytype = "ENSEMBL",
+          multiVals = "first"
+        )
+        
+        # Identify features that successfully mapped
+        mapped_indices <- !is.na(mapped_symbols)
+        num_mapped <- sum(mapped_indices)
+        
+        if (num_mapped == 0) {
+          showNotification("No Ensembl IDs mapped to Symbols.", type="warning")
+          return()
+        }
+        
+        # Create new names vector: Use Symbol if mapped, else keep original ID
+        new_names <- current_ids
+        new_names[mapped_indices] <- mapped_symbols[mapped_indices]
+        
+        # Handle duplicates (e.g. distinct Ensembl IDs mapping to same Symbol)
+        # We make them unique by appending .1, .2 etc.
+        incProgress(0.5, detail = "Handling duplicates")
+        new_names <- make.unique(new_names)
+        
+        # Rename features in the object
+        # Since RenameGenesSeurat doesn't exist, we create a new assay with swapped counts
+        incProgress(0.7, detail = "Updating Seurat Object")
+        
+        # Get counts matrix
+        # Use LayerData if available (Seurat v5), or GetAssayData
+        counts_mat <- GetAssayData(obj, layer = "counts")
+        
+        # Rename rows
+        rownames(counts_mat) <- new_names
+        
+        # Create new assay
+        new_assay <- CreateAssayObject(counts = counts_mat)
+        
+        # Try to bring over 'data' layer if it exists and has same structure
+        if ("data" %in% Layers(obj, assay = DefaultAssay(obj))) {
+           data_mat <- GetAssayData(obj, layer = "data")
+           if (nrow(data_mat) == nrow(counts_mat)) {
+             rownames(data_mat) <- new_names
+             new_assay <- SetAssayData(new_assay, layer = "data", new.data = data_mat)
+           }
+        }
+        
+        # Replace the default assay (usually RNA) with our renamed version
+        # It's safer to replace the assay entirely to ensure consistency
+        assay_name <- DefaultAssay(obj)
+        obj[[assay_name]] <- new_assay
+        
+        # If there were reductions, they might still have old feature names in loadings
+        # For now we keep them but note that feature loadings might be mismatched.
+        # Ideally we'd rename rows of Loadings(obj, reduction) as well.
+        for (red in Reductions(obj)) {
+           loadings <- Loadings(obj, reduction = red)
+           if (!is.null(loadings) && nrow(loadings) == length(current_ids)) {
+             # Only rename if dimensions match exactly (meaning all features were used)
+             # Often PCA uses only variable features, so this might not match exactly.
+             # Safe skip for now or we could try matching names.
+           }
+        }
+        
+        seurat_obj(obj)
+        
+        # Force UI updates
+        # Ensure all feature dropdowns are updated with new symbols
+        all_features <- c(rownames(obj), colnames(obj@meta.data))
+        lapply(c("p1","p2","p3","p4"), function(id) {
+          updateSelectizeInput(session, paste0(id, "-feature"), choices=all_features, server = TRUE)
+        })
+        
+        showNotification(paste("Renamed", num_mapped, "features to Symbols!"), type="message")
+        
+      }, error = function(e) {
+        showNotification(paste("Conversion Error:", e$message), type="error")
+      })
+    })
   })
   
   # --- DE Reactive Values & Logic ---
@@ -352,20 +643,63 @@ server <- function(input, output, session) {
       DT::formatRound(columns = c("p_val", "avg_log2FC", "pct.1", "pct.2", "p_val_adj"), digits = 4)
   })
   
-  output$de_volcano <- renderPlotly({
+  # Reactive volcano plot (for display and download)
+  volcano_plot <- reactive({
     req(de_results())
     df <- de_results()
-    df$significant <- df$p_val_adj < 0.05
     
-    p <- ggplot(df, aes(x = avg_log2FC, y = -log10(p_val), text = gene, color = significant)) +
-      geom_point(alpha = 0.6) +
+    # Get threshold values from inputs
+    logfc_thresh <- input$de_logfc
+    pval_thresh <- input$de_pval
+    if (is.null(pval_thresh)) pval_thresh <- 0.05
+    
+    # Get aesthetic controls
+    pt_size <- input$volcano_pt_size
+    if (is.null(pt_size)) pt_size <- 2
+    alpha_val <- input$volcano_alpha
+    if (is.null(alpha_val)) alpha_val <- 0.6
+    sig_color <- input$volcano_sig_color
+    if (is.null(sig_color)) sig_color <- "#E74C3C"
+    nonsig_color <- input$volcano_nonsig_color
+    if (is.null(nonsig_color)) nonsig_color <- "#95A5A6"
+    
+    # Determine significance based on user's threshold
+    df$significant <- df$p_val_adj < pval_thresh
+    
+    # Calculate symmetric x-axis limits
+    max_abs_fc <- max(abs(df$avg_log2FC), na.rm = TRUE)
+    x_limit <- ceiling(max_abs_fc * 1.1)  # Add 10% padding
+    
+    ggplot(df, aes(x = avg_log2FC, y = -log10(p_val), text = gene, color = significant)) +
+      geom_point(size = pt_size, alpha = alpha_val) +
+      # Add threshold lines
+      geom_hline(yintercept = -log10(pval_thresh), linetype = "dashed", color = "black", linewidth = 0.8) +
+      geom_vline(xintercept = c(-logfc_thresh, logfc_thresh), linetype = "dashed", color = "black", linewidth = 0.8) +
+      # Symmetric x-axis
+      coord_cartesian(xlim = c(-x_limit, x_limit)) +
       theme_minimal() +
-      scale_color_manual(values = c("gray", "red")) +
+      scale_color_manual(values = c(nonsig_color, sig_color), name = paste0("p-adj < ", pval_thresh)) +
       labs(title = paste("Volcano Plot:", input$de_ident_1, "vs", input$de_ident_2),
            x = "avg_log2FC", y = "-log10(p-value)")
-    
-    ggplotly(p, tooltip = "text")
   })
+  
+  output$de_volcano <- renderPlotly({
+    req(volcano_plot())
+    ggplotly(volcano_plot(), tooltip = "text")
+  })
+  
+  output$download_volcano <- downloadHandler(
+    filename = function() { 
+      paste0("Volcano_", input$de_ident_1, "_vs_", input$de_ident_2, "_", Sys.Date(), ".", input$volcano_format) 
+    },
+    content = function(file) {
+      req(volcano_plot())
+      ggsave(file, volcano_plot(), 
+             width = input$volcano_width, 
+             height = input$volcano_height, 
+             device = input$volcano_format)
+    }
+  )
   
   output$download_de <- downloadHandler(
     filename = function() { paste0("DE_", input$de_ident_1, "_vs_", input$de_ident_2, "_", Sys.Date(), ".csv") },
@@ -374,6 +708,463 @@ server <- function(input, output, session) {
       write.csv(de_results(), file, row.names = FALSE)
     }
   )
+  # ===== PATHWAY ENRICHMENT LOGIC =====
+  
+  enrichment_results <- reactiveVal(NULL)
+  
+  # Helper function: Convert gene symbols to Entrez IDs
+  convert_to_entrez <- function(genes, organism = "human") {
+    if (!has_enrichment) return(NULL)
+    
+    tryCatch({
+      if (organism == "human") {
+        suppressMessages(library(org.Hs.eg.db))
+        org_db <- org.Hs.eg.db
+      } else {
+        suppressMessages(library(org.Mm.eg.db))
+        org_db <- org.Mm.eg.db
+      }
+      
+      gene_map <- bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", 
+                      OrgDb = org_db, drop = TRUE)
+      return(gene_map)
+    }, error = function(e) {
+      showNotification(paste("Gene ID conversion error:", e$message), type = "error")
+      return(NULL)
+    })
+  }
+  
+  # Helper function: Get gene sets from database
+  get_gene_sets <- function(database, organism) {
+    if (!has_enrichment) return(NULL)
+    
+    tryCatch({
+      species <- ifelse(organism == "human", "Homo sapiens", "Mus musculus")
+      
+      if (database == "hallmark") {
+        msigdbr(species = species, category = "H")
+      } else if (database == "reactome") {
+        msigdbr(species = species, category = "C2", subcategory = "CP:REACTOME")
+      } else {
+        # For GO and KEGG, we'll use clusterProfiler's built-in functions
+        NULL
+      }
+    }, error = function(e) {
+      showNotification(paste("Database loading error:", e$message), type = "error")
+      return(NULL)
+    })
+  }
+  
+  # Run enrichment analysis
+  observeEvent(input$run_enrichment, {
+    req(has_enrichment)
+    
+    # Get gene list
+    if (input$enrich_source == "de") {
+      req(de_results())
+      df <- de_results()
+      
+      # For ORA: use only significant genes (typically upregulated/significant)
+      # For GSEA: use all genes ranked by fold change
+      if (input$enrich_type == "ora") {
+        # Filter to significant genes (p_val_adj < 0.05)
+        df_sig <- df[df$p_val_adj < 0.05, ]
+        if (nrow(df_sig) == 0) {
+          showNotification("No significant genes found for ORA. Please adjust DE p-value threshold.", 
+                          type = "error")
+          return(NULL)
+        }
+        
+        # Apply direction filter
+        direction <- input$enrich_gene_direction
+        if (is.null(direction)) direction <- "all"
+        
+        if (direction == "up") {
+          # Upregulated in Group 1 (positive log2FC)
+          df_sig <- df_sig[df_sig$avg_log2FC > 0, ]
+          direction_label <- "upregulated"
+        } else if (direction == "down") {
+          # Downregulated in Group 1 (negative log2FC)
+          df_sig <- df_sig[df_sig$avg_log2FC < 0, ]
+          direction_label <- "downregulated"
+        } else {
+          direction_label <- "significant"
+        }
+        
+        if (nrow(df_sig) == 0) {
+          showNotification(paste("No", direction_label, "genes found. Try different direction."), 
+                          type = "error")
+          return(NULL)
+        }
+        
+        genes <- df_sig$gene
+        gene_fc <- setNames(df_sig$avg_log2FC, df_sig$gene)
+        showNotification(paste("Using", length(genes), direction_label, "genes from DE results"), 
+                        type = "message")
+      } else {
+        # GSEA uses all genes ranked by fold change
+        genes <- df$gene
+        gene_fc <- setNames(df$avg_log2FC, df$gene)
+        showNotification(paste("Using", length(genes), "ranked genes for GSEA"), 
+                        type = "message")
+      }
+    } else {
+      req(input$enrich_genes)
+      genes <- strsplit(input$enrich_genes, "\\n")[[1]]
+      genes <- trimws(genes)
+      genes <- genes[genes != ""]
+      gene_fc <- NULL
+    }
+    
+    if (length(genes) == 0) {
+      showNotification("No genes provided", type = "error")
+      return(NULL)
+    }
+    
+    # Show progress
+    withProgress(message = "Running enrichment analysis...", value = 0, {
+      
+      # Convert to Entrez IDs
+      incProgress(0.2, detail = "Converting gene IDs")
+      gene_map <- convert_to_entrez(genes, input$enrich_organism)
+      
+      if (is.null(gene_map) || nrow(gene_map) == 0) {
+        showNotification("No genes could be mapped to Entrez IDs", type = "error")
+        return(NULL)
+      }
+      
+      showNotification(paste(nrow(gene_map), "out of", length(genes), "genes mapped"), 
+                      type = "message")
+      
+      # Get organism database
+      if (input$enrich_organism == "human") {
+        suppressMessages(library(org.Hs.eg.db))
+        org_db <- org.Hs.eg.db
+      } else {
+        suppressMessages(library(org.Mm.eg.db))
+        org_db <- org.Mm.eg.db
+      }
+      
+      # Run analysis based on type
+      incProgress(0.3, detail = "Running enrichment")
+      
+      result <- tryCatch({
+        if (input$enrich_type == "ora") {
+          # Over-Representation Analysis
+          if (input$enrich_database %in% c("go_bp", "go_mf", "go_cc")) {
+            ont <- switch(input$enrich_database,
+                         "go_bp" = "BP",
+                         "go_mf" = "MF",
+                         "go_cc" = "CC")
+            enrichGO(gene = gene_map$ENTREZID,
+                    OrgDb = org_db,
+                    ont = ont,
+                    pAdjustMethod = "BH",
+                    pvalueCutoff = input$enrich_pval,
+                    qvalueCutoff = input$enrich_qval,
+                    minGSSize = input$enrich_minsize,
+                    maxGSSize = input$enrich_maxsize)
+          } else if (input$enrich_database == "kegg") {
+            organism_code <- ifelse(input$enrich_organism == "human", "hsa", "mmu")
+            enrichKEGG(gene = gene_map$ENTREZID,
+                      organism = organism_code,
+                      pAdjustMethod = "BH",
+                      pvalueCutoff = input$enrich_pval,
+                      qvalueCutoff = input$enrich_qval,
+                      minGSSize = input$enrich_minsize,
+                      maxGSSize = input$enrich_maxsize)
+          } else {
+            # MSigDB (Hallmark, Reactome)
+            gene_sets <- get_gene_sets(input$enrich_database, input$enrich_organism)
+            if (is.null(gene_sets)) {
+              showNotification("Failed to load gene sets", type = "error")
+              return(NULL)
+            }
+            
+            term2gene <- gene_sets %>% dplyr::select(gs_name, entrez_gene)
+            enricher(gene = gene_map$ENTREZID,
+                    TERM2GENE = term2gene,
+                    pAdjustMethod = "BH",
+                    pvalueCutoff = input$enrich_pval,
+                    qvalueCutoff = input$enrich_qval,
+                    minGSSize = input$enrich_minsize,
+                    maxGSSize = input$enrich_maxsize)
+          }
+        } else {
+          # GSEA
+          # Prepare ranked gene list
+          if (is.null(gene_fc)) {
+            showNotification("GSEA requires fold change values. Please use DE results.", 
+                           type = "error")
+            return(NULL)
+          }
+          
+          # Map fold changes to Entrez IDs
+          gene_list <- gene_fc[gene_map$SYMBOL]
+          names(gene_list) <- gene_map$ENTREZID[match(names(gene_list), gene_map$SYMBOL)]
+          gene_list <- sort(gene_list, decreasing = TRUE)
+          gene_list <- gene_list[!is.na(names(gene_list))]
+          
+          if (input$enrich_database %in% c("go_bp", "go_mf", "go_cc")) {
+            ont <- switch(input$enrich_database,
+                         "go_bp" = "BP",
+                         "go_mf" = "MF",
+                         "go_cc" = "CC")
+            gseGO(geneList = gene_list,
+                 OrgDb = org_db,
+                 ont = ont,
+                 pAdjustMethod = "BH",
+                 pvalueCutoff = input$enrich_pval,
+                 minGSSize = input$enrich_minsize,
+                 maxGSSize = input$enrich_maxsize)
+          } else if (input$enrich_database == "kegg") {
+            organism_code <- ifelse(input$enrich_organism == "human", "hsa", "mmu")
+            gseKEGG(geneList = gene_list,
+                   organism = organism_code,
+                   pAdjustMethod = "BH",
+                   pvalueCutoff = input$enrich_pval,
+                   minGSSize = input$enrich_minsize,
+                   maxGSSize = input$enrich_maxsize)
+          } else {
+            # MSigDB (Hallmark, Reactome)
+            gene_sets <- get_gene_sets(input$enrich_database, input$enrich_organism)
+            if (is.null(gene_sets)) {
+              showNotification("Failed to load gene sets", type = "error")
+              return(NULL)
+            }
+            
+            term2gene <- gene_sets %>% dplyr::select(gs_name, entrez_gene)
+            GSEA(geneList = gene_list,
+                TERM2GENE = term2gene,
+                pAdjustMethod = "BH",
+                pvalueCutoff = input$enrich_pval,
+                minGSSize = input$enrich_minsize,
+                maxGSSize = input$enrich_maxsize)
+          }
+        }
+      }, error = function(e) {
+        showNotification(paste("Enrichment error:", e$message), type = "error")
+        return(NULL)
+      })
+      
+      incProgress(0.5, detail = "Processing results")
+      
+      if (!is.null(result) && nrow(result@result) > 0) {
+        # Convert Entrez IDs to gene symbols for better readability
+        if (input$enrich_organism == "human") {
+          suppressMessages(library(org.Hs.eg.db))
+          org_db <- org.Hs.eg.db
+        } else {
+          suppressMessages(library(org.Mm.eg.db))
+          org_db <- org.Mm.eg.db
+        }
+        
+        result <- setReadable(result, OrgDb = org_db, keyType = "ENTREZID")
+        enrichment_results(result)
+        showNotification(paste("Found", nrow(result@result), "enriched pathways"), 
+                        type = "message")
+      } else {
+        showNotification("No significant enrichment found", type = "warning")
+        enrichment_results(NULL)
+      }
+    })
+  })
+  
+  # Dynamic UI for enrichment plots based on analysis type
+  output$enrichment_plots_ui <- renderUI({
+    if (input$enrich_type == "ora") {
+      tabsetPanel(
+        tabPanel("Results Table",
+          br(),
+          DT::DTOutput("enrichment_table")
+        ),
+        tabPanel("Dot Plot",
+          br(),
+          plotOutput("enrichment_dotplot", height = "600px")
+        ),
+        tabPanel("Bar Plot",
+          br(),
+          plotOutput("enrichment_barplot", height = "600px")
+        ),
+        tabPanel("Network Plot",
+          br(),
+          plotOutput("enrichment_network", height = "700px")
+        )
+      )
+    } else {
+      # GSEA - only show results table and enrichment score plots
+      tabsetPanel(
+        tabPanel("Results Table",
+          br(),
+          DT::DTOutput("enrichment_table")
+        ),
+        tabPanel("GSEA Enrichment Curves",
+          br(),
+          plotOutput("enrichment_gsea", height = "800px")
+        )
+      )
+    }
+  })
+  
+  
+  
+  # Results table
+  output$enrichment_table <- DT::renderDT({
+    req(enrichment_results())
+    result_df <- as.data.frame(enrichment_results())
+    
+    DT::datatable(result_df, 
+                 options = list(pageLength = 25, scrollX = TRUE),
+                 filter = "top") %>%
+      DT::formatRound(columns = c("pvalue", "p.adjust", "qvalue"), digits = 4)
+  })
+  
+  # Reactive plot objects for reuse in display and download
+  enrichment_dotplot_obj <- reactive({
+    req(enrichment_results())
+    dotplot(enrichment_results(), showCategory = 20) + 
+      theme(axis.text.y = element_text(size = 10))
+  })
+  
+  enrichment_barplot_obj <- reactive({
+    req(enrichment_results())
+    barplot(enrichment_results(), showCategory = 20) +
+      theme(axis.text.y = element_text(size = 10))
+  })
+  
+  enrichment_network_obj <- reactive({
+    req(enrichment_results())
+    result_sim <- pairwise_termsim(enrichment_results())
+    emapplot(result_sim, showCategory = 30)
+  })
+  
+  # Dot plot
+  output$enrichment_dotplot <- renderPlot({
+    req(enrichment_dotplot_obj())
+    tryCatch({
+      enrichment_dotplot_obj()
+    }, error = function(e) {
+      ggplot() + annotate("text", x = 0, y = 0, 
+                         label = paste("Plot error:", e$message), 
+                         size = 4, color = "red") + theme_void()
+    })
+  })
+  
+  
+  # Bar plot
+  output$enrichment_barplot <- renderPlot({
+    req(enrichment_barplot_obj())
+    tryCatch({
+      enrichment_barplot_obj()
+    }, error = function(e) {
+      ggplot() + annotate("text", x = 0, y = 0, 
+                         label = paste("Plot error:", e$message), 
+                         size = 4, color = "red") + theme_void()
+    })
+  })
+  
+  
+  # Network plot
+  output$enrichment_network <- renderPlot({
+    req(enrichment_network_obj())
+    tryCatch({
+      enrichment_network_obj()
+    }, error = function(e) {
+      ggplot() + annotate("text", x = 0, y = 0, 
+                         label = paste("Network plot error:", e$message), 
+                         size = 4, color = "red") + theme_void()
+    })
+  })
+  
+  # Reactive GSEA plot object for reuse
+  enrichment_gsea_obj <- reactive({
+    req(enrichment_results(), input$enrich_type == "gsea")
+    n_pathways <- min(5, nrow(enrichment_results()))
+    gseaplot2(enrichment_results(), geneSetID = 1:n_pathways, 
+             pvalue_table = TRUE)
+  })
+  
+  # GSEA enrichment plots
+  output$enrichment_gsea <- renderPlot({
+    req(enrichment_gsea_obj())
+    tryCatch({
+      enrichment_gsea_obj()
+    }, error = function(e) {
+      ggplot() + annotate("text", x = 0, y = 0, 
+                         label = paste("GSEA plot error:", e$message), 
+                         size = 4, color = "red") + theme_void()
+    })
+  })
+  
+  
+  # Download enrichment results
+  output$download_enrichment <- downloadHandler(
+    filename = function() { 
+      paste0("Enrichment_", input$enrich_database, "_", Sys.Date(), ".csv") 
+    },
+    content = function(file) {
+      req(enrichment_results())
+      write.csv(as.data.frame(enrichment_results()), file, row.names = FALSE)
+    }
+  )
+  
+  # Download dot plot
+  output$download_enrichment_dotplot <- downloadHandler(
+    filename = function() { 
+      paste0("Enrichment_Dotplot_", input$enrich_database, "_", Sys.Date(), ".", input$enrich_plot_format) 
+    },
+    content = function(file) {
+      req(enrichment_dotplot_obj())
+      ggsave(file, enrichment_dotplot_obj(), 
+             width = input$enrich_plot_width, 
+             height = input$enrich_plot_height, 
+             device = input$enrich_plot_format)
+    }
+  )
+  
+  # Download bar plot
+  output$download_enrichment_barplot <- downloadHandler(
+    filename = function() { 
+      paste0("Enrichment_Barplot_", input$enrich_database, "_", Sys.Date(), ".", input$enrich_plot_format) 
+    },
+    content = function(file) {
+      req(enrichment_barplot_obj())
+      ggsave(file, enrichment_barplot_obj(), 
+             width = input$enrich_plot_width, 
+             height = input$enrich_plot_height, 
+             device = input$enrich_plot_format)
+    }
+  )
+  
+  # Download network plot
+  output$download_enrichment_network <- downloadHandler(
+    filename = function() { 
+      paste0("Enrichment_Network_", input$enrich_database, "_", Sys.Date(), ".", input$enrich_plot_format) 
+    },
+    content = function(file) {
+      req(enrichment_network_obj())
+      ggsave(file, enrichment_network_obj(), 
+             width = input$enrich_plot_width, 
+             height = input$enrich_plot_height, 
+             device = input$enrich_plot_format)
+    }
+  )
+  
+  # Download GSEA enrichment curves
+  output$download_enrichment_gsea <- downloadHandler(
+    filename = function() { 
+      paste0("Enrichment_GSEA_", input$enrich_database, "_", Sys.Date(), ".", input$enrich_plot_format) 
+    },
+    content = function(file) {
+      req(enrichment_gsea_obj())
+      ggsave(file, enrichment_gsea_obj(), 
+             width = input$enrich_plot_width, 
+             height = input$enrich_plot_height, 
+             device = input$enrich_plot_format)
+    }
+  )
+  
+  # ===== END PATHWAY ENRICHMENT LOGIC =====
   
   output$obj_info <- renderText({ 
     req(seurat_obj())
@@ -651,16 +1442,19 @@ server <- function(input, output, session) {
             )
           } else if (ptype == "ViolinPlot") {
             req(feat)
-            p <- SCpubr::do_ViolinPlot(
-              sample = obj,
-              features = feat,
-              group.by = grp,
-              split.by = splt,
-              split.plot = TRUE,
-              colors.use = colors,
-              font.size = font_size,
-              legend.position = legend_pos
-            )
+            p <- tryCatch({
+              result <- SCpubr::do_ViolinPlot(
+                sample = obj,
+                features = feat,
+                group.by = grp,
+                split.by = splt,
+                colors.use = colors,
+                font.size = font_size,
+                legend.position = legend_pos
+              )
+            }, error = function(e) {
+              ggplot() + annotate("text", x=0, y=0, label=paste("SCpubr Violin Error:", e$message), size=4, color="red") + theme_void()
+            })
           } else if (ptype == "DotPlot") {
             req(feat)
             # DotPlot - support viridis palettes
@@ -678,7 +1472,7 @@ server <- function(input, output, session) {
             }
             
             p <- tryCatch({
-              SCpubr::do_DotPlot(
+              result <- SCpubr::do_DotPlot(
                 sample = obj,
                 features = feat,
                 group.by = grp,
@@ -691,7 +1485,7 @@ server <- function(input, output, session) {
               )
             }, error = function(e) {
               # If split.by fails, try without it
-              SCpubr::do_DotPlot(
+              result <- SCpubr::do_DotPlot(
                 sample = obj,
                 features = feat,
                 group.by = grp,
@@ -703,6 +1497,28 @@ server <- function(input, output, session) {
               )
             })
           }
+          
+          # Fix SCpubr Legend Orientation
+          if (!is.null(p)) {
+            leg_dir <- if (legend_pos %in% c("bottom", "top")) "horizontal" else "vertical"
+            
+            if (ptype == "FeaturePlot") {
+              p <- p + guides(
+                color = guide_colorbar(direction = leg_dir, title.position = "top", order = 1),
+                fill = guide_colorbar(direction = leg_dir, title.position = "top", order = 1)
+              )
+            } else if (ptype == "ViolinPlot") {
+              p <- p + guides(fill = guide_legend(direction = leg_dir, override.aes = list(size = 4), title.position = "top"))
+            } else if (ptype == "DimPlot") {
+              p <- p + guides(color = guide_legend(direction = leg_dir, override.aes = list(size = 4), title.position = "top"))
+            } else if (ptype == "DotPlot") {
+              p <- p + guides(
+                color = guide_colorbar(direction = leg_dir, title.position = "top", order = 1),
+                size = guide_legend(direction = leg_dir, title.position = "top", order = 2)
+              )
+            }
+          }
+          
         }, error = function(e) {
           # Fallback to standard if SCpubr fails
           p <<- ggplot() + annotate("text", x=0, y=0, label=paste("SCpubr error:", e$message), size=4, color="red") + theme_void()
@@ -803,7 +1619,7 @@ server <- function(input, output, session) {
       ptype <- input[[ns("plot_type")]]
       if (ptype %in% c("FeaturePlot","ViolinPlot","DotPlot")) {
         all_features <- c(rownames(seurat_obj()), colnames(seurat_obj()@meta.data))
-        updateSelectizeInput(session, ns("feature"), choices=all_features)
+        updateSelectizeInput(session, ns("feature"), choices=all_features, server = TRUE)
       }
     })
     
@@ -859,11 +1675,18 @@ server <- function(input, output, session) {
         lvls <- sort(unique(seurat_obj()@meta.data[[grp]]))
       }
       
-      if (length(lvls) > 30) return(p("Too many levels for manual colors"))
-      
-      lapply(lvls, function(l) {
+      # Create scrollable div for many levels
+      color_pickers <- lapply(lvls, function(l) {
         colourInput(ns(paste0("col_", l)), paste("Color", l), value="gray")
       })
+      
+      if (length(lvls) > 20) {
+        div(style="max-height: 400px; overflow-y: auto; padding: 5px;",
+            p(paste("Showing", length(lvls), "color pickers (scroll to see all)")),
+            color_pickers)
+      } else {
+        color_pickers
+      }
     })
   })
   
