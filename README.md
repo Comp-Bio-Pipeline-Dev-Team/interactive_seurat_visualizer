@@ -12,7 +12,7 @@ A comprehensive R Shiny application for interactive visualization and analysis o
 - **Interactive Controls**: Point size, orientation, split.by, group.by
 
 ### Gene Programs
-- **NMF Analysis**: Discover gene expression programs using Non-negative Matrix Factorization
+- **Fast NMF Analysis**: Optimized gene program discovery using `snmf/r` (Sparse NMF with Alternating Least Squares)
 - **Factor Heatmaps**: Visualize top genes per factor in clustered heatmaps
 - **Spatial Visualization**: Project factor scores onto UMAP/tSNE
 - **Gene Rankings**: Export top contributing genes for each program
@@ -40,7 +40,20 @@ A comprehensive R Shiny application for interactive visualization and analysis o
 
 ### Data Management
 - **File Support**: Seurat objects (.rds), H5AD files (.h5ad), H5Seurat files (.h5seurat) up to 10GB
-- **Ensembl Conversion**: Convert Ensembl gene IDs to gene symbols for Human or Mouse
+- **Ensembl Conversion**: Convert Ensembl Gene IDs to Gene Symbols
+- **QC Metrics**: Interactive quality control with custom mitochondrial column selection and filtering sliders
+
+### Multimodal (CITE-seq) & Gating
+- **Protein Visualization**: FeaturePlots for ADT data with full aesthetic control
+- **Co-expression**: Scatterplots of Protein vs Gene expression with density contours
+- **Gating**: Interactive flow-cytometry style gating (lasso/box select) to subset cells based on co-expression patterns
+
+### VDJ Repertoire Analysis
+- **Clonotype Visualization**: Analyze clonal expansion and distribution
+- **Diversity Metrics**: Calculate Shannon, Simpson, and InvSimpson indices
+- **Integration**: Link TCR/BCR data with scRNA-seq clusters
+- **Export**: Visualizations and data tables for repertoire metrics
+
 
 ## Quick Start
 
@@ -138,6 +151,9 @@ See [DOCKER_INSTRUCTIONS.md](DOCKER_INSTRUCTIONS.md) for detailed Docker deploym
 - **From DE Results**: Uses genes from your differential expression analysis
 - **Custom Gene List**: Paste your own gene list (one per line)
 
+#### Species Selection
+- **Human/Mouse Support**: Explicitly choose the target organism for accurate database mapping (`org.Hs.eg.db` / `org.Mm.eg.db`)
+
 #### Choose Analysis Type
 - **ORA (Over-Representation Analysis)**: Tests if specific pathways are over-represented in your gene set
   - Use gene direction filter to analyze upregulated, downregulated, or all significant genes
@@ -201,7 +217,24 @@ See [DOCKER_INSTRUCTIONS.md](DOCKER_INSTRUCTIONS.md) for detailed Docker deploym
 - **Preview**: See your data before filtering
 - **Reset**: Restore original dataset
 
-### 9. Export Tab
+### 9. Multimodal (ADT) Tab
+- **Protein Expression**: Visualize surface protein levels
+- **Co-expression**: Plot Protein vs Gene expression
+- **Aesthetics**: Full control over point size, palettes (Magma, Viridis, etc.), and font sizes
+- **Export**: Download high-resolution plots
+
+### 10. Gating Tab
+- **Interactive Gating**: Select two features (Protein/Gene)
+- **Lasso Select**: Draw around cells of interest to subset the Seurat object
+- **Reset**: Revert to original dataset
+
+### 11. VDJ Analysis Tab
+- **Upload VDJ Data**: Load `filtered_contig_annotations.csv` (10x Genomics format)
+- **Clonal Expansion**: Visualize clone size distribution across clusters
+- **Diversity Analysis**: Compute and compare diversity indices (Shannon, Simpson)
+- **Export**: Download plots and tables
+
+### 12. Export Tab
 - Choose target (single plot or all 4 plots)
 - Select format (PNG, PDF, JPG)
 - Set dimensions
@@ -215,6 +248,7 @@ See [DOCKER_INSTRUCTIONS.md](DOCKER_INSTRUCTIONS.md) for detailed Docker deploym
   - Core: `shiny`, `Seurat`, `ggplot2`, `patchwork`
   - Visualization: `SCpubr`, `MetBrewer`, `viridis`, `RColorBrewer`
   - Analysis: `UCell`, `DT`, `ggrepel`, `NMF`
+  - VDJ Analysis: `scRepertoire`
   - Pathway Enrichment: `clusterProfiler`, `enrichplot`, `fgsea`, `msigdbr`, `DOSE`, `igraph`
   - Gene Annotation: `org.Hs.eg.db` (Human), `org.Mm.eg.db` (Mouse), `AnnotationDbi`
   - Utilities: `colourpicker`, `cowplot`, `plotly`

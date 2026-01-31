@@ -5,9 +5,11 @@ install.packages(c(
   "ggplot2", 
   "patchwork", 
   "shinythemes", 
+  "shinyjs",
   "colourpicker", 
   "cowplot", 
   "plotly", 
+  "NMF",
   "remotes", 
   "BiocManager", 
   "MetBrewer", 
@@ -28,7 +30,8 @@ BiocManager::install(c(
   "fgsea",            # Fast GSEA
   "org.Hs.eg.db",     # Human annotations
   "org.Mm.eg.db",     # Mouse annotations
-  "DOSE"              # Disease ontology
+  "DOSE",             # Disease ontology
+  "scRepertoire"      # VDJ Analysis
 ), update = FALSE)
 
 # Install GitHub packages

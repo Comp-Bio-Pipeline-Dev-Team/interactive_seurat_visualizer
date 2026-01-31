@@ -11,6 +11,7 @@ library(viridis)
 library(RColorBrewer)
 library(DT)
 library(ggrepel)
+library(shinyjs)
 
 # Load NMF BEFORE BiocGenerics packages to avoid do.call masking
 library(NMF)
@@ -99,363 +100,456 @@ ui <- navbarPage(
     .plot-container { border: 1px solid #ddd; padding: 10px; margin: 10px; background: white; border-radius: 4px; }
     .active-plot { border: 3px solid #2c3e50 !important; box-shadow: 0 0 10px rgba(44,62,80,0.3); }
     .nav-tabs { font-weight: bold; }
-  "))),
-  
-  tabPanel("Visualization",
-  
-  sidebarLayout(
-    sidebarPanel(
-      width = 3,
-      fileInput("seurat_file", "Upload Seurat (.rds or .h5ad)", accept = c(".rds", ".h5ad")),
-      radioButtons("ensembl_species", "Species", choices = c("Human", "Mouse"), inline = TRUE),
-      actionButton("convert_ensembl", "Convert Ensembl IDs to Symbols", icon = icon("dna"), class = "btn-info btn-block"),
-      br(),
-      
-      # JavaScript to highlight active plot and switch tabs
-      tags$script(HTML("
-        $(document).on('shiny:inputchanged', function(event) {
-          if (event.name === 'settings_tabs') {
-            // Remove active class from all
-            $('.plot-container').removeClass('active-plot');
-            // Add to corresponding plot
-            if (event.value === 'Plot 1') $('#plot1-container').addClass('active-plot');
-            if (event.value === 'Plot 2') $('#plot2-container').addClass('active-plot');
-            if (event.value === 'Plot 3') $('#plot3-container').addClass('active-plot');
-            if (event.value === 'Plot 4') $('#plot4-container').addClass('active-plot');
-          }
-        });
-        
-        // Click on plot to activate and switch tab
-        $(document).on('click', '.plot-container', function() {
-          var plotId = $(this).attr('id');
-          var tabName = '';
-          if (plotId === 'plot1-container') tabName = 'Plot 1';
-          if (plotId === 'plot2-container') tabName = 'Plot 2';
-          if (plotId === 'plot3-container') tabName = 'Plot 3';
-          if (plotId === 'plot4-container') tabName = 'Plot 4';
-          
-          if (tabName) {
-            // Switch to the corresponding tab
-            $('a[data-value=\"' + tabName + '\"]').tab('show');
-            // Highlight the plot
-            $('.plot-container').removeClass('active-plot');
-            $(this).addClass('active-plot');
-          }
-        });
-      ")),
-      
-      tabsetPanel(id = "settings_tabs",
-        
-        tabPanel("Subsetting",
-          br(),
-          h5("Preview (All Cells)"),
-          plotOutput("preview_plot", height="250px"),
-          hr(),
-          selectInput("subset_col", "Meta Col", choices = NULL),
-          selectizeInput("subset_levels", "Keep Levels", choices = NULL, multiple=TRUE),
-          actionButton("apply_subset_meta", "Filter", class="btn-warning btn-sm"),
-          hr(),
-          actionButton("reset_data", "Reset", class="btn-danger")
-        ),
-        
-        tabPanel("Signatures",
-           br(),
-           textAreaInput("sig_genes", "Genes (one per line)", rows=5, placeholder="CD3D\nCD3E\nCD8A"),
-           textInput("sig_name", "Signature Name", "MySig"),
-           actionButton("calc_ucell", "Calculate UCell", class="btn-success")
-        ),
-        
-        tabPanel("Plot 1", plotControlUI("p1")),
-        tabPanel("Plot 2", plotControlUI("p2")),
-        tabPanel("Plot 3", plotControlUI("p3")),
-        tabPanel("Plot 4", plotControlUI("p4")),
-        
-        tabPanel("Export",
-           br(),
-           selectInput("export_target", "Target", choices = c("All Plots", "Plot 1", "Plot 2", "Plot 3", "Plot 4")),
-           selectInput("export_format", "Format", choices = c("png", "pdf", "jpg")),
-           numericInput("export_w", "Width", 12), 
-           numericInput("export_h", "Height", 10),
-           downloadButton("download_plot", "Download")
-        )
-      )
-    ),
     
-    mainPanel(
-      width = 9,
-      textOutput("obj_info"),
-      fluidRow(
-        column(6, 
-          div(style="text-align: center; font-weight: bold; color: #2c3e50; margin-bottom: 5px;", "Plot 1"),
-          div(id="plot1-container", class="plot-container", plotOutput("plot1", height="400px"))
-        ),
-        column(6, 
-          div(style="text-align: center; font-weight: bold; color: #2c3e50; margin-bottom: 5px;", "Plot 2"),
-          div(id="plot2-container", class="plot-container", plotOutput("plot2", height="400px"))
-        )
+    /* Dark Mode Styles */
+    body.dark-mode { background-color: #2c3e50; color: #ecf0f1; }
+    body.dark-mode .plot-container { background-color: #34495e; border-color: #7f8c8d; }
+    body.dark-mode .well { background-color: #34495e; border: none; color: #ecf0f1; }
+    body.dark-mode .nav-tabs > li > a { color: #ecf0f1; }
+    body.dark-mode .nav-tabs > li.active > a, 
+    body.dark-mode .nav-tabs > li.active > a:focus, 
+    body.dark-mode .nav-tabs > li.active > a:hover { color: #2c3e50; background-color: #ecf0f1; }
+    body.dark-mode h4, body.dark-mode h5 { color: #ecf0f1; }
+  ")))
+  ,tags$script(HTML('
+    $(document).on("click", ".plot-container", function() {
+      // 1. Highlight the container
+      $(".plot-container").removeClass("active-plot");
+      $(this).addClass("active-plot");
+      
+      // 2. Identify which plot it is
+      var id = $(this).attr("id");
+      var targetTab = "";
+      if(id === "plot1-container") targetTab = "Plot 1";
+      if(id === "plot2-container") targetTab = "Plot 2";
+      if(id === "plot3-container") targetTab = "Plot 3";
+      if(id === "plot4-container") targetTab = "Plot 4";
+      
+      // 3. Switch the settings tab in the sidebar
+      // We find the tab link with the matching data-value and trigger a click
+      if(targetTab !== "") {
+        var selector = "a[data-value=\'" + targetTab + "\']";
+        $(selector).tab("show");
+      }
+    });
+  ')),
+  
+  # Dark Mode Toggle in Footer or Header
+  footer = div(
+    style = "position: fixed; bottom: 10px; right: 10px; z-index: 1000;",
+    checkboxInput("dark_mode", "Dark Mode", value = FALSE)
+  ),
+  
+  
+  
+  # Initialize shinyjs
+  useShinyjs(),
+  
+  tabPanel("Quality Control",
+    sidebarLayout(
+      sidebarPanel(
+        width = 3,
+        h4("1. Load Data"),
+        fileInput("seurat_file", "Upload Seurat (.rds or .h5ad)", accept = c(".rds", ".h5ad")),
+        radioButtons("ensembl_species", "Species", choices = c("Human", "Mouse"), inline = TRUE),
+        actionButton("convert_ensembl", "Convert Ensembl IDs to Symbols", icon = icon("dna"), class = "btn-info btn-block"),
+        hr(),
+        h4("2. Filtering"),
+        h5("QC Thresholds"),
+        selectInput("qc_mito_col", "Mitochondrial Column", choices = NULL),
+        sliderInput("filter_percent_mt", "Max % Mito", min=0, max=100, value=20),
+        sliderInput("filter_nFeature_min", "Min nFeature", min=0, max=10000, value=200),
+        sliderInput("filter_nCount_min", "Min nCount", min=0, max=50000, value=500),
+        hr(),
+        h5("Metadata Subset"),
+        selectInput("subset_col", "Meta Col", choices = NULL),
+        selectizeInput("subset_levels", "Keep Levels", choices = NULL, multiple=TRUE),
+        br(),
+        actionButton("apply_filters", "Apply Filtering", class="btn-warning btn-block"),
+        br(),
+        actionButton("reset_data", "Reset to Original", class="btn-danger btn-block"),
+        hr(),
+        h5("Visualization"),
+        p("Distribution of QC metrics across samples/groups.")
       ),
-      fluidRow(
-        column(6, 
-          div(style="text-align: center; font-weight: bold; color: #2c3e50; margin-bottom: 5px;", "Plot 3"),
-          div(id="plot3-container", class="plot-container", plotOutput("plot3", height="400px"))
-        ),
-        column(6, 
-          div(style="text-align: center; font-weight: bold; color: #2c3e50; margin-bottom: 5px;", "Plot 4"),
-          div(id="plot4-container", class="plot-container", plotOutput("plot4", height="400px"))
+      mainPanel(
+        width = 9,
+        tabsetPanel(
+          tabPanel("Violin Plots", plotOutput("qc_violin", height = "600px")),
+          tabPanel("Scatter Plot", plotOutput("qc_scatter", height = "600px"))
         )
       )
     )
-  )),
+  ),
   
+  tabPanel("Signatures",
+    sidebarLayout(
+      sidebarPanel(
+        width = 3,
+        h4("UCell Signatures"),
+        p("Calculate signature scores for gene sets."),
+        textAreaInput("sig_genes", "Genes (one per line)", rows=10, placeholder="CD3D\nCD3E\nCD8A"),
+        textInput("sig_name", "Signature Name", "MySig"),
+        actionButton("calc_ucell", "Calculate UCell", class="btn-success btn-block")
+      ),
+      mainPanel(
+         width = 9,
+         h4("Instructions"),
+         p("1. Enter a list of genes."),
+         p("2. Give the signature a name."),
+         p("3. Click Calculate."),
+         p("4. The score will be added as metadata. Go to 'Visualization' to plot it."),
+         hr(),
+         verbatimTextOutput("ucell_log")
+      )
+    )
+  ),
+  
+  tabPanel("Visualization",
+    sidebarLayout(
+      sidebarPanel(
+        width = 3,
+        p(tags$small("Data loaded in 'Quality Control' tab.")),
+        br(),
+        tabsetPanel(id = "settings_tabs",
+          tabPanel("Plot 1", plotControlUI("p1")),
+          tabPanel("Plot 2", plotControlUI("p2")),
+          tabPanel("Plot 3", plotControlUI("p3")),
+          tabPanel("Plot 4", plotControlUI("p4")),
+          tabPanel("Export",
+             br(),
+             selectInput("export_target", "Target", choices = c("All Plots", "Plot 1", "Plot 2", "Plot 3", "Plot 4")),
+             selectInput("export_format", "Format", choices = c("png", "pdf", "jpg")),
+             numericInput("export_w", "Width", 12), 
+             numericInput("export_h", "Height", 10),
+             downloadButton("download_plot", "Download")
+          )
+        )
+      ),
+      mainPanel(
+        width = 9,
+        textOutput("obj_info"),
+        fluidRow(
+          column(6, div(style="text-align: center; font-weight: bold; color: #2c3e50;", "Plot 1"), div(id="plot1-container", class="plot-container", plotOutput("plot1", height="400px"))),
+          column(6, div(style="text-align: center; font-weight: bold; color: #2c3e50;", "Plot 2"), div(id="plot2-container", class="plot-container", plotOutput("plot2", height="400px")))
+        ),
+        fluidRow(
+          column(6, div(style="text-align: center; font-weight: bold; color: #2c3e50;", "Plot 3"), div(id="plot3-container", class="plot-container", plotOutput("plot3", height="400px"))),
+          column(6, div(style="text-align: center; font-weight: bold; color: #2c3e50;", "Plot 4"), div(id="plot4-container", class="plot-container", plotOutput("plot4", height="400px")))
+        )
+      )
+    )
+  ),
+
   tabPanel("Gene Programs",
     sidebarLayout(
       sidebarPanel(
         width = 3,
-        h4("NMF Parameters"),
-        numericInput("nmf_k", "Number of Factors (k)", value = 5, min = 2, max = 20),
-        p(tags$small("Higher k finds more granular programs but takes longer.")),
-        actionButton("run_nmf", "Run NMF", class = "btn-primary btn-block"),
+        h4("NMF Settings"),
+        sliderInput("nmf_k", "Number of Factors (k)", min=2, max=20, value=5),
+        numericInput("nmf_nrun", "N Runs", value=10, min=1),
+        actionButton("run_nmf", "Run NMF", class="btn-primary btn-block"),
         hr(),
-        h5("Visualization"),
-        selectInput("nmf_factor", "Select Factor", choices = NULL),
-        sliderInput("nmf_pt_size", "Point Size", min=0.1, max=3, value=1),
-        selectInput("nmf_color", "Color Scale", choices = c("Viridis", "Magma", "Plasma"), selected = "Viridis"),
-        hr(),
-        h5("Export"),
-        selectInput("nmf_export_format", "Format", choices = c("png", "pdf", "jpg"), selected = "png"),
-        numericInput("nmf_export_width", "Width (inches)", value = 10, min = 4, max = 20),
-        numericInput("nmf_export_height", "Height (inches)", value = 8, min = 4, max = 20),
-        downloadButton("download_nmf_heatmap", "Download Heatmap", class = "btn-info btn-block"),
-        downloadButton("download_nmf_featureplot", "Download FeaturePlot", class = "btn-info btn-block"),
-        downloadButton("download_nmf_table", "Download Top Genes CSV", class = "btn-success btn-block")
+        conditionalPanel(
+          condition = "output.nmf_done",
+          h4("Visualization"),
+          selectInput("nmf_viz_type", "Plot Type", choices=c("Factor Heatmap", "FeaturePlot (Scores)")),
+          selectInput("nmf_factor", "Select Factor", choices=NULL),
+          sliderInput("nmf_pt_size", "Point Size (FeaturePlot)", min=0.1, max=3, value=1, step=0.1),
+          selectInput("nmf_color", "Color Scale", choices=c("Magma", "Viridis", "Plasma", "Inferno"), selected="Magma"),
+          downloadButton("download_nmf_csv", "Download Top Genes")
+        )
       ),
       mainPanel(
         width = 9,
-        tabsetPanel(
-          tabPanel("Factor Heatmap",
-            br(),
-            plotOutput("nmf_heatmap", height = "600px")
-          ),
-          tabPanel("Factor Scores",
-            br(),
-            fluidRow(
-              column(12, 
-                p("Select a factor from the sidebar to visualize its scores on cells.")
-              )
-            ),
-            plotOutput("nmf_feature_plot", height = "600px")
-          ),
-          tabPanel("All Factors FeaturePlot",
-            br(),
-            plotOutput("nmf_all_factors_plot", height = "800px")
-          ),
-          tabPanel("Top Genes",
-            br(),
-            fluidRow(
-              column(12,
-                p("Showing top genes for the selected factor. Higher weights indicate genes that define this program.")
-              )
-            ),
-            DT::DTOutput("nmf_gene_table")
-          )
-        )
+        conditionalPanel(
+          condition = "input.nmf_viz_type == 'Factor Heatmap'",
+          plotOutput("nmf_heatmap", height="600px")
+        ),
+        conditionalPanel(
+          condition = "input.nmf_viz_type == 'FeaturePlot (Scores)'",
+          plotOutput("nmf_featureplot", height="600px")
+        ),
+        hr(),
+        h5("Top Genes for Selected Factor"),
+        DT::dataTableOutput("nmf_gene_table")
       )
     )
   ),
-  
+
   tabPanel("Differential Expression",
     sidebarLayout(
       sidebarPanel(
         width = 3,
-        h4("DE Parameters"),
+        h4("Differential Expression"),
         selectInput("de_group_by", "Comparison Group", choices = NULL),
-        fluidRow(
-          column(6, selectInput("de_ident_1", "Ident 1", choices = NULL)),
-          column(6, selectInput("de_ident_2", "Ident 2", choices = NULL))
-        ),
-        p(tags$small("Select 'All Others' in Ident 2 for one-vs-rest comparison.")),
-        hr(),
-        numericInput("de_logfc", "LogFC Threshold", value = 0.25, min = 0, max = 5, step = 0.05),
-        numericInput("de_minpct", "Min Pct", value = 0.1, min = 0, max = 1, step = 0.05),
-        numericInput("de_pval", "P-value Threshold", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
-        selectInput("de_test", "Test Type", choices = c("wilcox", "t-test", "roc", "LR"), selected = "wilcox"),
-        br(),
-        actionButton("run_de", "Run Differential Expression", class="btn-primary btn-block"),
+        selectInput("de_ident_1", "Ident 1", choices = NULL),
+        selectInput("de_ident_2", "Ident 2", choices = NULL),
+        selectInput("de_test", "Test Method", choices = c("wilcox", "bimod", "t", "roc"), selected = "wilcox"),
+        numericInput("de_logfc", "Min LogFC", value = 0.25, step = 0.05),
+        numericInput("de_minpct", "Min Pct", value = 0.1, step = 0.05),
+        numericInput("de_pval", "P-value Threshold", value = 0.05, step = 0.01),
+        actionButton("run_de", "Run Differential Expression", class = "btn-primary btn-block"),
         hr(),
         h5("Volcano Plot Settings"),
-        sliderInput("volcano_pt_size", "Point Size", min = 0.5, max = 5, value = 2, step = 0.5),
-        sliderInput("volcano_alpha", "Point Transparency", min = 0.1, max = 1, value = 0.6, step = 0.1),
-        colourInput("volcano_sig_color", "Significant Color", value = "#E74C3C"),
-        colourInput("volcano_nonsig_color", "Non-significant Color", value = "#95A5A6"),
+        numericInput("volcano_pt_size", "Point Size", value = 1.5, min = 0.1),
+        numericInput("volcano_alpha", "Alpha", value = 0.6, min = 0.1, max = 1),
+        colourpicker::colourInput("volcano_sig_color", "Significant Color", value = "#E74C3C"),
+        colourpicker::colourInput("volcano_nonsig_color", "Non-significant Color", value = "#95A5A6"),
+        selectInput("volcano_format", "Export Format", choices = c("png", "pdf"), selected = "png"),
+        numericInput("volcano_width", "Width", 8),
+        numericInput("volcano_height", "Height", 6),
+        downloadButton("download_volcano", "Download Volcano", class = "btn-info btn-block"),
         hr(),
-        h5("Export"),
-        selectInput("volcano_format", "Format", choices = c("png", "pdf", "jpg"), selected = "png"),
-        numericInput("volcano_width", "Width (inches)", value = 10, min = 4, max = 20),
-        numericInput("volcano_height", "Height (inches)", value = 8, min = 4, max = 20),
-        downloadButton("download_volcano", "Download Volcano Plot", class="btn-info btn-block"),
-        hr(),
-        downloadButton("download_de", "Download CSV", class="btn-success btn-block")
+        downloadButton("download_de", "Download Results Table", class = "btn-info btn-block")
       ),
       mainPanel(
         width = 9,
         tabsetPanel(
-          tabPanel("Results Table", 
-            br(),
-            DT::DTOutput("de_table")
-          ),
-          tabPanel("Volcano Plot", 
-            br(),
-            plotlyOutput("de_volcano", height = "600px")
-          )
+          tabPanel("Results Table", DT::DTOutput("de_table")),
+          tabPanel("Volcano Plot", plotlyOutput("de_volcano", height = "600px"))
         )
       )
     )
   ),
-  
+
   tabPanel("Pathway Enrichment",
     sidebarLayout(
       sidebarPanel(
         width = 3,
         h4("Enrichment Analysis"),
+        selectInput("enrich_organism", "Organism", choices = c("Human" = "human", "Mouse" = "mouse"), selected = "human"),
+        selectInput("enrich_source", "Gene Source", 
+                    choices = c("From DE Results" = "de", "Custom List" = "custom")),
         
-        radioButtons("enrich_source", "Input Source",
-                     choices = c("From DE Results" = "de", "Custom Gene List" = "custom"),
-                     selected = "de"),
+        conditionalPanel(
+          condition = "input.enrich_source == 'de'",
+          selectInput("enrich_gene_direction", "Direction", 
+                      choices = c("All Significant" = "all", "Upregulated" = "up", "Downregulated" = "down"))
+        ),
         
         conditionalPanel(
           condition = "input.enrich_source == 'custom'",
-          textAreaInput("enrich_genes", "Gene List (one per line)", 
-                       rows = 5, placeholder = "CD3D\nCD4\nCD8A\n...")
+          textAreaInput("enrich_custom_genes", "Paste Genes (Symbol)", rows = 5, placeholder = "TP53\nEGFR\nCD4")
         ),
         
+        selectInput("enrich_method", "Method", 
+                    choices = c("Over-Representation (ORA)" = "ora", "GSEA" = "gsea")),
+        
+        selectInput("enrich_db", "Database", 
+                    choices = c("GO Biological Process" = "go_bp", 
+                                "GO Molecular Function" = "go_mf",
+                                "KEGG Pathways" = "kegg", 
+                                "Reactome" = "reactome",
+                                "MSigDB Hallmark" = "hallmark")),
+        
+        actionButton("run_enrichment", "Run Enrichment Analysis", class = "btn-success btn-block"),
         hr(),
-        h5("Analysis Settings"),
-        
-        selectInput("enrich_type", "Analysis Type",
-                   choices = c("Over-Representation (ORA)" = "ora", 
-                              "Gene Set Enrichment (GSEA)" = "gsea"),
-                   selected = "ora"),
-        
-        conditionalPanel(
-          condition = "input.enrich_type == 'ora' && input.enrich_source == 'de'",
-          selectInput("enrich_gene_direction", "Gene Direction",
-                     choices = c("All Significant Genes" = "all",
-                                "Upregulated Only (positive log2FC)" = "up",
-                                "Downregulated Only (negative log2FC)" = "down"),
-                     selected = "all")
-        ),
-        
-        selectInput("enrich_database", "Database",
-                   choices = c("MSigDB Hallmarks" = "hallmark",
-                              "GO Biological Process" = "go_bp",
-                              "GO Molecular Function" = "go_mf",
-                              "GO Cellular Component" = "go_cc",
-                              "KEGG" = "kegg",
-                              "Reactome" = "reactome"),
-                   selected = "hallmark"),
-        
-        selectInput("enrich_organism", "Organism",
-                   choices = c("Human" = "human", "Mouse" = "mouse"),
-                   selected = "human"),
-        
-        hr(),
-        h5("Parameters"),
-        
-        numericInput("enrich_pval", "P-value Cutoff", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
-        numericInput("enrich_qval", "Q-value Cutoff", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
-        numericInput("enrich_minsize", "Min Gene Set Size", value = 10, min = 5, max = 100),
-        numericInput("enrich_maxsize", "Max Gene Set Size", value = 500, min = 100, max = 2000),
-        
-        br(),
-        actionButton("run_enrichment", "Run Enrichment Analysis", class="btn-primary btn-block"),
-        
-        hr(),
-        h5("Export Results"),
-        downloadButton("download_enrichment", "Download Results (CSV)", class="btn-success btn-block"),
-        
-        hr(),
-        h5("Export Plots"),
-        selectInput("enrich_plot_format", "Format", choices = c("png", "pdf", "jpg"), selected = "png"),
-        numericInput("enrich_plot_width", "Width (inches)", value = 10, min = 4, max = 20),
-        numericInput("enrich_plot_height", "Height (inches)", value = 8, min = 4, max = 20),
-        
-        conditionalPanel(
-          condition = "input.enrich_type == 'ora'",
-          downloadButton("download_enrichment_dotplot", "Download Dot Plot", class="btn-info btn-block"),
-          downloadButton("download_enrichment_barplot", "Download Bar Plot", class="btn-info btn-block"),
-          downloadButton("download_enrichment_network", "Download Network Plot", class="btn-info btn-block")
-        ),
-        
-        conditionalPanel(
-          condition = "input.enrich_type == 'gsea'",
-          downloadButton("download_enrichment_gsea", "Download GSEA Curves", class="btn-info btn-block")
-        )
+        h5("Visualization"),
+        selectInput("enrich_plot_type", "Plot Type", 
+                    choices = c("Dotplot", "Barplot", "Network (Cnet)", "Enrichment Map (Emap)", "GSEA Plot")),
+        numericInput("enrich_show_n", "Show Top N", value = 15, min = 1, max = 50),
+        downloadButton("download_enrich_plot", "Download Plot")
       ),
       mainPanel(
         width = 9,
-        uiOutput("enrichment_plots_ui")
+        tabsetPanel(
+          tabPanel("Enrichment Plot", plotOutput("enrich_plot", height = "700px")),
+          tabPanel("Results Table", DT::DTOutput("enrich_table"))
+        )
       )
     )
   ),
-  
+
   tabPanel("Heatmap",
     sidebarLayout(
       sidebarPanel(
         width = 3,
         h4("Heatmap Settings"),
-        selectizeInput("hm_features", "Features (select multiple)", choices = NULL, multiple = TRUE, options = list(
-          placeholder = 'Type genes or metadata...'
-        )),
-        selectInput("hm_group_by", "Group Cells By", choices = NULL),
-        selectInput("hm_scaling", "Scaling / Z-score", 
-                    choices = c("None (Real Expression)" = "none", 
-                                "Row Z-score" = "row")),
-        checkboxInput("hm_raster", "Rasterize", value = TRUE),
+        selectizeInput("hm_features", "Features (Genes)", choices = NULL, multiple = TRUE),
+        selectInput("hm_group_by", "Group By", choices = NULL),
+        checkboxInput("hm_cluster_rows", "Cluster Rows", value = TRUE),
+        checkboxInput("hm_cluster_cols", "Cluster Columns", value = FALSE),
+        selectInput("hm_scaling", "Scaling", choices = c("Row Z-Score" = "row", "None" = "none"), selected = "row"),
+        selectInput("hm_palette", "Palette", choices = c("Viridis", "Magma", "RdBu", "RdYlBu"), selected = "Viridis"),
+        
         hr(),
         h5("Annotation Colors"),
-        selectInput("hm_anno_color_source", "Color Source", choices = c("Default", "Palette", "Manual")),
-        conditionalPanel(
-          condition = "input.hm_anno_color_source == 'Palette'",
-          selectInput("hm_anno_palette", "Annotation Palette", 
-                      choices = list(
-                        "Viridis" = c("viridis", "magma", "plasma", "inferno", "cividis"),
-                        "RColorBrewer" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Accent"),
-                        "MetBrewer" = names(MetBrewer::MetPalettes)
-                      ))
-        ),
+        selectInput("hm_anno_color_source", "Color Source", choices = c("Default", "Manual"), selected = "Default"),
         conditionalPanel(
           condition = "input.hm_anno_color_source == 'Manual'",
           uiOutput("hm_manual_color_ui")
         ),
         
         hr(),
-        h5("Dimensions & Aesthetics"),
-        fluidRow(
-          column(6, numericInput("hm_width", "Width (in)", value = 12, min = 1, max = 50)),
-          column(6, numericInput("hm_height", "Height (in)", value = 14, min = 1, max = 50))
-        ),
-        numericInput("hm_lines_width", "Gap Width", value = 1, min = 0, max = 10, step = 0.1),
-        selectInput("hm_palette", "Color Palette", 
-                    choices = c("Viridis" = "viridis", "Magma" = "magma", "Plasma" = "plasma", "Inferno" = "inferno", "Cividis" = "cividis", "Spectral" = "Spectral", "RdBu" = "RdBu", "RdYlBu" = "RdYlBu")),
-        numericInput("hm_font_size", "Gene Font Size", value = 10, min = 1, max = 20),
-        numericInput("hm_legend_font_size", "Legend Font Size", value = 10, min = 1, max = 20),
+        actionButton("generate_heatmap", "Generate Heatmap", class = "btn-primary btn-block"),
         br(),
-        actionButton("run_hm", "Generate Heatmap", class = "btn-primary btn-block"),
-        hr(),
-        downloadButton("download_hm", "Download Heatmap", class = "btn-success btn-block")
+        downloadButton("download_heatmap", "Download Heatmap", class = "btn-info btn-block")
       ),
       mainPanel(
         width = 9,
         plotOutput("heatmap_plot", height = "800px")
       )
     )
+  ),
+
+tabPanel("Multimodal (ADT)",
+  sidebarLayout(
+    sidebarPanel(
+      width = 3,
+      h4("Protein Expression"),
+      selectizeInput("adt_feature", "Select Protein", choices = NULL),
+      sliderInput("pt_size_adt", "Point Size", min=0.1, max=3, value=1),
+      selectInput("adt_palette", "Color Scale", choices = c("Viridis" = "viridis", "Magma" = "magma", "Plasma" = "plasma", "Inferno" = "inferno", "Cividis" = "cividis", "Spectral" = "Spectral", "RdBu" = "RdBu", "RdYlBu" = "RdYlBu"), selected = "viridis"),
+      selectInput("species_select", "Species", choices = c("Human", "Mouse"), selected = "Human"),
+      hr(),
+      h4("Co-expression"),
+      selectizeInput("adt_feature_x", "Protein (X-axis)", choices = NULL),
+      selectizeInput("rna_feature_y", "Gene (Y-axis)", choices = NULL),
+      hr(),
+      h5("Dimensions & Aesthetics"),
+      fluidRow(
+        column(6, numericInput("adt_export_width", "Width (in)", value = 8, min = 1, max = 50)),
+        column(6, numericInput("adt_export_height", "Height (in)", value = 6, min = 1, max = 50))
+      ),
+      selectInput("adt_export_format", "Format", choices = c("png", "pdf", "jpg"), selected = "png"),
+      numericInput("adt_pt_size", "Point Size", min=0.1, max=5, value=1, step = 0.1),
+      numericInput("adt_font_size", "Font Size", value = 12, min = 1, max = 24),
+      br(),
+      downloadButton("download_adt_feature", "Download FeaturePlot", class="btn-info btn-block"),
+      downloadButton("download_adt_coexp", "Download Co-expression", class="btn-info btn-block")
+    ),
+    mainPanel(
+      width = 9,
+      tabsetPanel(
+        tabPanel("FeaturePlot", plotOutput("adt_feature_plot", height = "600px")),
+        tabPanel("Co-expression", plotOutput("adt_rna_coexpression", height = "600px"))
+      )
+    )
   )
+),
+
+tabPanel("Gating",
+  sidebarLayout(
+    sidebarPanel(
+      width = 3,
+      h4("Co-expression Gating"),
+      p("Select two features (e.g., ADT proteins) and gate cells."),
+      selectizeInput("gate_feature_x", "Feature X (e.g. CD3)", choices = NULL),
+      selectizeInput("gate_feature_y", "Feature Y (e.g. CD19)", choices = NULL),
+      hr(),
+      h5("Gating Actions"),
+      p(tags$small("1. Use Lasso/Box tool on plot to select cells.")),
+      p(tags$small("2. Click 'Gate' to filter dataset.")),
+      actionButton("gate_cells", "Gate Selected Cells", class="btn-danger btn-block", icon=icon("filter")),
+      br(),
+      actionButton("reset_gating", "Reset Gating", class="btn-secondary btn-block")
+    ),
+    mainPanel(
+      width = 9,
+      plotlyOutput("gating_plot", height = "600px"),
+      verbatimTextOutput("gating_info")
+    )
+  )
+),
+
+tabPanel("VDJ Analysis",
+  sidebarLayout(
+    sidebarPanel(
+      width = 3,
+      h4("Upload VDJ Data"),
+      fileInput("vdj_upload", "Upload contigs.csv", accept = c(".csv")),
+      p(tags$small("Upload 'filtered_contig_annotations.csv' from CellRanger.")),
+      hr(),
+      h4("Visualization"),
+      selectInput("vdj_viz_type", "Plot Type", 
+                  choices = c("Clonal Overlay", "V Gene Usage", "Clonal Diversity"), 
+                  selected = "Clonal Overlay"),
+      
+      conditionalPanel(
+        condition = "input.vdj_viz_type == 'Clonal Diversity'",
+        selectInput("vdj_group_by", "Group By", choices = NULL),
+        selectInput("vdj_diversity_metric", "Metric", 
+                    choices = c("Shannon", "Simpson", "inv.simpson", "chao"), 
+                    selected = "Shannon"),
+        numericInput("vdj_boot_n", "Bootstraps", value = 100, min = 10, max = 1000)
+      ),
+      hr(),
+      h5("Export"),
+      downloadButton("download_vdj_plot", "Download Plot", class="btn-info btn-block")
+    ),
+    mainPanel(
+      width = 9,
+      conditionalPanel(
+        condition = "input.vdj_viz_type == 'Clonal Overlay'",
+        plotOutput("vdj_overlay", height = "600px")
+      ),
+      conditionalPanel(
+        condition = "input.vdj_viz_type == 'V Gene Usage'",
+        plotOutput("vdj_vgene", height = "600px")
+      ),
+      conditionalPanel(
+        condition = "input.vdj_viz_type == 'Clonal Diversity'",
+        plotOutput("vdj_diversity_plot", height = "600px")
+      )
+    )
+  )
+),
+
+tabPanel("Pseudobulk",
+  sidebarLayout(
+    sidebarPanel(
+      width = 3,
+      h4("Pseudobulk Settings"),
+      selectInput("pb_group_by", "Group By", choices = NULL),
+      p(tags$small("Aggregates expression by the selected metadata column.")),
+      checkboxInput("pb_cluster_rows", "Cluster Rows", value = TRUE),
+      checkboxInput("pb_cluster_cols", "Cluster Cols", value = TRUE),
+      selectInput("pb_scaling", "Scaling", choices = c("Row Z-Score"="row", "None"="none"), selected="row"),
+      selectInput("pb_palette", "Palette", choices = c("Viridis", "Magma", "RdBu", "RdYlBu"), selected="Viridis"),
+      hr(),
+      h5("Export"),
+      fluidRow(
+          column(6, numericInput("pb_export_w", "W", 10)),
+          column(6, numericInput("pb_export_h", "H", 10))
+      ),
+      downloadButton("download_pb_heatmap", "Download Heatmap", class="btn-info btn-block"),
+      hr(),
+      p("This visualization helps identify robust group-level differences.")
+    ),
+    mainPanel(
+      width = 9,
+      plotOutput("pseudobulk_heatmap", height = "800px")
+    )
+  )
+)
 )
 
 server <- function(input, output, session) {
   
+  # Initialize Reactives
   original_obj <- reactiveVal(NULL)
+  # Main reactive holding the (potentially subsetted) Seurat object
   seurat_obj <- reactiveVal(NULL)
+  
+  # Alias for backend scripts which expect 'data_object()'
+  data_object <- seurat_obj
+
+  # Source Backend Logic (Local Scope)
+  source("multimodal_backend.R", local = TRUE)
+  source("vdj_backend.R", local = TRUE)
+  source("qc_backend.R", local = TRUE)
+  source("pseudobulk_backend.R", local = TRUE)
+  source("enrichment_backend.R", local = TRUE)
+  
+  # Dark Mode Observer
+  observe({
+    if (input$dark_mode) {
+      runjs("$('body').addClass('dark-mode');")
+    } else {
+      runjs("$('body').removeClass('dark-mode');")
+    }
+  })
   
   observeEvent(input$seurat_file, {
     req(input$seurat_file)
@@ -526,6 +620,18 @@ server <- function(input, output, session) {
           Key(obj@reductions$tsne) <- "tSNE_"
         }
       }
+      
+      # Calculate QC metrics if missing
+      if (!"percent.mt" %in% colnames(obj@meta.data)) {
+        if (any(grepl("^MT-", rownames(obj)))) {
+            obj[["percent.mt"]] <- PercentageFeatureSet(obj, pattern = "^MT-")
+        } else if (any(grepl("^mt-", rownames(obj)))) {
+            obj[["percent.mt"]] <- PercentageFeatureSet(obj, pattern = "^mt-")
+        } else {
+            obj[["percent.mt"]] <- 0
+        }
+      }
+
       # -----------------------------------
       
       original_obj(obj)
@@ -654,6 +760,64 @@ server <- function(input, output, session) {
     req(seurat_obj())
     meta_cols <- names(seurat_obj()@meta.data)
     updateSelectInput(session, "de_group_by", choices = meta_cols, selected = "seurat_clusters")
+    updateSelectInput(session, "pb_group_by", choices = meta_cols, selected = "seurat_clusters") # For Pseudobulk
+    
+    # Update Mitochondrial Column choices (numeric only)
+    numeric_cols <- names(seurat_obj()@meta.data)[sapply(seurat_obj()@meta.data, is.numeric)]
+    
+    # Check for likely candidates
+    selected_mito <- "percent.mt"
+    if (!selected_mito %in% numeric_cols) {
+       candidates <- grep("^percent\\.|^pct_|^mt", numeric_cols, value = TRUE, ignore.case = TRUE)
+       if(length(candidates) > 0) selected_mito <- candidates[1]
+       else selected_mito <- numeric_cols[1] # Default to first numeric
+    }
+    updateSelectInput(session, "qc_mito_col", choices = numeric_cols, selected = selected_mito)
+  })
+
+  # Load Demo Data Observer
+  observeEvent(input$load_demo, {
+    req(file.exists("test_seurat.rds"))
+    
+    withProgress(message = 'Loading Demo Data...', value = 0, {
+      tryCatch({
+        obj <- readRDS("test_seurat.rds")
+        
+        # Ensure percent.mt
+        if (!"percent.mt" %in% colnames(obj@meta.data)) {
+           if (any(grepl("^MT-", rownames(obj)))) {
+             obj[["percent.mt"]] <- PercentageFeatureSet(obj, pattern = "^MT-")
+           } else if (any(grepl("^mt-", rownames(obj)))) {
+             obj[["percent.mt"]] <- PercentageFeatureSet(obj, pattern = "^mt-")
+           } else {
+             obj[["percent.mt"]] <- 0
+           }
+        }
+        
+        # Update reactive values
+        seurat_obj(obj)
+        original_obj(obj)
+        
+        # Update UI choices
+        meta_cols <- names(obj@meta.data)
+        updateSelectInput(session, "subset_col", choices = meta_cols)
+        
+        # Populate Gating features (Prefer ADT if available)
+        features <- rownames(obj)
+        if ("ADT" %in% names(obj@assays)) {
+             adt_feats <- rownames(obj[["ADT"]])
+             # Prefix ADT features for clarity if needed, or just list them
+             features <- c(adt_feats, features)
+        }
+        updateSelectizeInput(session, "gate_feature_x", choices = features, server = TRUE)
+        updateSelectizeInput(session, "gate_feature_y", choices = features, server = TRUE)
+        
+        showNotification("Demo data loaded successfully!", type = "message")
+        
+      }, error = function(e) {
+        showNotification(paste("Error loading demo:", e$message), type = "error")
+      })
+    })
   })
   
   # Update Ident 1 and Ident 2 based on chosen metadata column
@@ -1256,11 +1420,70 @@ server <- function(input, output, session) {
     updateSelectizeInput(session, "subset_levels", choices=vals)
   })
   
-  observeEvent(input$apply_subset_meta, {
-    req(seurat_obj(), input$subset_levels)
-    cells <- rownames(seurat_obj()@meta.data[seurat_obj()@meta.data[[input$subset_col]] %in% input$subset_levels, ])
-    seurat_obj(subset(seurat_obj(), cells=cells))
-    showNotification(paste("Filtered to", length(cells), "cells"), type="message")
+  observeEvent(input$apply_filters, {
+    req(original_obj())
+    
+    # Start with original object to allow re-filtering
+    obj <- original_obj()
+    
+    # 1. Apply Numeric QC Filters
+    # Check if percent.mt exists
+    if (!"percent.mt" %in% colnames(obj@meta.data)) {
+      if (any(grepl("^MT-", rownames(obj)))) {
+        obj[["percent.mt"]] <- PercentageFeatureSet(obj, pattern = "^MT-")
+      } else {
+        # If no MT genes, create dummy 0 column to avoid error if slider is used (or warn)
+        obj[["percent.mt"]] <- 0
+        showNotification("No mitochondrial genes found (pattern ^MT-). percent.mt set to 0.", type="warning")
+      }
+    }
+    
+    # Check nFeature/nCount existence (standard Seurat)
+    # Usually nFeature_RNA, nCount_RNA. If integrated, might vary.
+    # We'll use the default assay's meta features if possible
+    meta <- obj@meta.data
+    
+    # Filter logic
+    keep_cells <- colnames(obj)
+    
+    # Filter by percent.mt (User selected column)
+    mito_col <- input$qc_mito_col
+    if (!is.null(mito_col) && mito_col %in% colnames(meta)) {
+       cells_mt <- rownames(meta)[meta[[mito_col]] <= input$filter_percent_mt]
+       keep_cells <- intersect(keep_cells, cells_mt)
+    }
+    
+    # Filter by nFeature
+    nf_col <- paste0("nFeature_", DefaultAssay(obj))
+    if (!nf_col %in% colnames(meta)) nf_col <- "nFeature_RNA" # Fallback
+    if (nf_col %in% colnames(meta)) {
+       cells_nf <- rownames(meta)[meta[[nf_col]] >= input$filter_nFeature_min]
+       keep_cells <- intersect(keep_cells, cells_nf)
+    }
+    
+    # Filter by nCount
+    nc_col <- paste0("nCount_", DefaultAssay(obj))
+    if (!nc_col %in% colnames(meta)) nc_col <- "nCount_RNA" # Fallback
+    if (nc_col %in% colnames(meta)) {
+       cells_nc <- rownames(meta)[meta[[nc_col]] >= input$filter_nCount_min]
+       keep_cells <- intersect(keep_cells, cells_nc)
+    }
+    
+    # 2. Apply Metadata Subset (if selected)
+    if (!is.null(input$subset_col) && !is.null(input$subset_levels)) {
+       cells_meta <- rownames(meta)[meta[[input$subset_col]] %in% input$subset_levels]
+       keep_cells <- intersect(keep_cells, cells_meta)
+    }
+    
+    # Apply subset
+    if (length(keep_cells) == 0) {
+      showNotification("Filtering resulted in 0 cells! Reverting...", type="error")
+    } else {
+      # Use subset function
+      obj_sub <- subset(obj, cells = keep_cells)
+      seurat_obj(obj_sub)
+      showNotification(paste("Filtered to", length(keep_cells), "cells"), type="message")
+    }
   })
   
   observeEvent(input$reset_data, { 
@@ -1484,12 +1707,19 @@ server <- function(input, output, session) {
             pal_source <- input[[ns("color_source")]]
             if (!is.null(pal_source) && pal_source == "Palette") {
               pal_name <- input[[ns("palette_name")]]
+              # Respect Viridis options
               if (!is.null(pal_name) && pal_name %in% c("viridis", "magma", "plasma", "inferno", "cividis")) {
-                 # Map to SCpubr's viridis.palette options (A-E)
-                 viridis_map <- list(magma="A", inferno="B", plasma="C", viridis="D", cividis="E")
-                 viridis_pal <- viridis_map[[pal_name]]
+                 option_map <- list(viridis="D", magma="A", plasma="C", inferno="B", cividis="E")
+                 viridis_pal <- option_map[[pal_name]]
               }
+              # If user selected RColorBrewer/MetBrewer, we can't easily force it into SCpubr's 'viridis_color_map' argument
+              # which typically expects a viridis option character. 
+              # However, SCpubr might support 'colors.use' for continuous? 
+              # Actually SCpubr do_FeaturePlot uses 'viridis_color_map' = character.
+              # If we strictly want to support others, we might need to fallback to standard, 
+              # OR just warn user. For now, we stick to respecting viridis variants.
             }
+
             
             # Get direction
             if (!is.null(input[[ns("scpubr_viridis_dir")]])) {
@@ -1777,7 +2007,7 @@ server <- function(input, output, session) {
       
       # Create scrollable div for many levels
       color_pickers <- lapply(lvls, function(l) {
-        colourInput(ns(paste0("col_", l)), paste("Color", l), value="gray")
+        colourpicker::colourInput(ns(paste0("col_", l)), paste("Color", l), value="gray")
       })
       
       if (length(lvls) > 20) {
@@ -1807,11 +2037,28 @@ server <- function(input, output, session) {
     obj <- seurat_obj()
     grp <- input$hm_group_by
     lvls <- sort(unique(as.character(obj@meta.data[[grp]])))
-    
+
     if (length(lvls) > 50) return(p("Too many levels for manual colors"))
     
     lapply(lvls, function(l) {
-      colourInput(paste0("hm_col_", l), paste("Color", l), value = "#808080")
+      colourpicker::colourInput(paste0("hm_col_", l), paste("Color", l), value = "#808080")
+    })
+  })
+  
+
+  
+  # File Upload Logic
+  observeEvent(input$seurat_file, {
+    req(input$seurat_file)
+    
+    withProgress(message = "Loading Seurat object...", value = 0, {
+      tryCatch({
+        obj <- readRDS(input$seurat_file$datapath)
+        seurat_obj(obj)
+        showNotification("Seurat object loaded successfully!", type = "message")
+      }, error = function(e) {
+        showNotification(paste("Error loading Seurat object:", e$message), type = "error")
+      })
     })
   })
   
@@ -2167,7 +2414,7 @@ server <- function(input, output, session) {
       
       # Run NMF
       res <- tryCatch({
-        NMF::nmf(mat, rank = k, method = "snmf/l", seed = 123456)
+        NMF::nmf(mat, rank = k, method = "snmf/r", seed = 123456)
       }, error = function(e) {
         showNotification(paste("NMF error:", e$message), type = "error", duration = 10)
         message("NMF failed with error: ", e$message)
@@ -2208,6 +2455,11 @@ server <- function(input, output, session) {
       updateSelectInput(session, "nmf_factor", choices = factor_names, selected = factor_names[1])
     })
   })
+  
+  output$nmf_done <- reactive({
+    return(!is.null(nmf_results$model))
+  })
+  outputOptions(output, "nmf_done", suspendWhenHidden = FALSE)
   
   output$nmf_heatmap <- renderPlot({
     req(nmf_results$feature_loadings)
@@ -2380,6 +2632,86 @@ server <- function(input, output, session) {
     }
   })
   
+  # --- Multimodal Logic ---
+  
+  # Reactive for Co-expression Plot to support download
+  adt_coexp_plot <- reactive({
+    req(seurat_obj(), input$adt_feature_x, input$rna_feature_y)
+    obj <- seurat_obj()
+    
+    # Get Data
+    df <- FetchData(obj, vars = c(input$adt_feature_x, input$rna_feature_y))
+    colnames(df) <- c("Protein", "RNA")
+    
+    # Theme settings
+    font_size <- if(!is.null(input$adt_font_size)) input$adt_font_size else 12
+    pt_size <- if(!is.null(input$adt_pt_size)) input$adt_pt_size else 1
+    
+    p <- ggplot(df, aes(x=Protein, y=RNA)) +
+      geom_point(alpha=0.6, size=pt_size, color="#2c3e50") +
+      stat_density_2d(color="#e74c3c") +
+      theme_minimal(base_size = font_size) +
+      labs(title = paste(input$adt_feature_x, "vs", input$rna_feature_y),
+           x = input$adt_feature_x, y = input$rna_feature_y) +
+      geom_smooth(method="lm", color="blue", se=FALSE)
+      
+    return(p)
+  })
+
+  output$adt_rna_coexpression <- renderPlot({
+    req(adt_coexp_plot())
+    adt_coexp_plot()
+  })
+  
+  # Reactive for FeaturePlot (ADT)
+  output$adt_feature_plot <- renderPlot({
+    req(seurat_obj(), input$adt_feature)
+    obj <- seurat_obj()
+    
+    # Palettes
+    pal <- input$adt_palette
+    if (is.null(pal)) pal <- "viridis"
+    
+    # Map to SCpubr/Viridis options if needed, or use base logic
+    # Simplified approach: Use FeaturePlot and apply scale
+    p <- FeaturePlot(obj, features = input$adt_feature, min.cutoff = "q9") +
+      theme_void() +
+      labs(title = input$adt_feature)
+      
+    # Apply palette
+    if (pal %in% c("viridis", "magma", "plasma", "inferno", "cividis")) {
+      p <- p + scale_color_viridis_c(option = pal)
+    } else if (pal %in% c("RdBu", "RdYlBu", "Spectral")) {
+      p <- p + scale_color_distiller(palette = pal)
+    }
+    
+    # Apply sizing
+    pt_size <- if(!is.null(input$adt_pt_size)) input$adt_pt_size else 1
+    # Seurat FeaturePlot uses 'pt.size' argument, but since we already generated p...
+    # We can try to update the layer or just regenerate with pt.size if possible. 
+    # Actually FeaturePlot takes pt.size. Let's regenerate.
+    
+    p <- FeaturePlot(obj, features = input$adt_feature, min.cutoff = "q9", pt.size = pt_size) +
+         theme_void(base_size = if(!is.null(input$adt_font_size)) input$adt_font_size else 12) +
+         labs(title = input$adt_feature)
+
+    if (pal %in% c("viridis", "magma", "plasma", "inferno", "cividis")) {
+      p <- p + scale_color_viridis_c(option = pal)
+    } else {
+        p <- p + scale_color_distiller(palette = pal)
+    }
+    p
+  })
+  
+  # Download Handlers for ADT
+  output$download_adt_coexp <- downloadHandler(
+    filename = function() { paste0("Coexpression_", input$adt_feature_x, "_vs_", input$rna_feature_y, ".", input$adt_export_format) },
+    content = function(file) {
+      req(adt_coexp_plot())
+      ggsave(file, adt_coexp_plot(), width = input$adt_export_width, height = input$adt_export_height)
+    }
+  )
+
   output$download_nmf_featureplot <- downloadHandler(
     filename = function() {
       paste0("NMF_FeaturePlot_AllFactors_", Sys.Date(), ".", input$nmf_export_format)
@@ -2402,11 +2734,93 @@ server <- function(input, output, session) {
       W <- nmf_results$feature_loadings
       col <- input$nmf_factor
       scores <- W[, col]
+      req(seurat_obj(), input$nmf_gene_table_rows_all)
+      # Get the correct indices from DT (filtered/sorted)
+      idx <- input$nmf_gene_table_rows_all
+      
+      # Reconstruct the table logic (simplified)
+      res <- nmf_results()
+      req(res)
+      W <- basis(res)
+      factors <- input$nmf_factor
+      if (is.null(factors)) factors <- colnames(W)[1]
+      
+      scores <- W[, factors]
       df <- data.frame(Gene = names(sort(scores, decreasing=TRUE)), 
                       Weight = sort(scores, decreasing=TRUE))
       write.csv(df, file, row.names = FALSE)
     }
   )
-}
 
+  # --- Gating Logic ---
+  
+  output$gating_plot <- renderPlotly({
+    req(seurat_obj(), input$gate_feature_x, input$gate_feature_y)
+    
+    obj <- seurat_obj()
+    feat_x <- input$gate_feature_x
+    feat_y <- input$gate_feature_y
+    
+    # Fetch data (check ADT first then RNA)
+    # Helper to get data
+    get_data <- function(f, o) {
+      if (f %in% rownames(o)) {
+        FetchData(o, vars = f)[,1]
+      } else {
+        # Try finding in ADT
+        if ("ADT" %in% names(o@assays) && f %in% rownames(o[["ADT"]])) {
+           FetchData(o, vars = paste0("ADT_", f))[,1] # Seurat often prefixes
+           # If fails, try raw
+           d <- GetAssayData(o, assay="ADT", layer="data")[f, ]
+           return(d)
+        }
+        return(NULL)
+      }
+    }
+    
+    # Simple FetchData is safer
+    df <- FetchData(obj, vars = c(feat_x, feat_y))
+    colnames(df) <- c("X", "Y")
+    df$CellID <- rownames(df)
+    
+    plot_ly(df, x = ~X, y = ~Y, key = ~CellID, type = "scatter", mode = "markers",
+            marker = list(size = 5, opacity = 0.6)) %>%
+      layout(
+        title = paste(feat_x, "vs", feat_y),
+        xaxis = list(title = feat_x),
+        yaxis = list(title = feat_y),
+        dragmode = "lasso"
+      ) %>%
+      event_register("plotly_selected")
+  })
+  
+  output$gating_info <- renderPrint({
+    d <- event_data("plotly_selected")
+    if (is.null(d)) "Select cells on the plot using Lasso or Box tool."
+    else paste("Selected", nrow(d), "cells.")
+  })
+  
+  observeEvent(input$gate_cells, {
+    req(seurat_obj())
+    d <- event_data("plotly_selected")
+    if (is.null(d)) {
+      showNotification("No cells selected!", type = "warning")
+      return()
+    }
+    
+    selected_cells <- d$key
+    if (length(selected_cells) > 0) {
+      obj_sub <- subset(seurat_obj(), cells = selected_cells)
+      seurat_obj(obj_sub)
+      showNotification(paste("Gated to", length(selected_cells), "cells."), type = "message")
+    }
+  })
+  
+  observeEvent(input$reset_gating, {
+    req(original_obj())
+    seurat_obj(original_obj())
+    showNotification("Reset to original dataset.", type = "message")
+  })
+
+} # End Server
 shinyApp(ui, server)
