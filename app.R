@@ -109,6 +109,27 @@ ui <- navbarPage(
     body.dark-mode .nav-tabs > li.active > a, 
     body.dark-mode .nav-tabs > li.active > a:focus, 
     body.dark-mode .nav-tabs > li.active > a:hover { color: #2c3e50; background-color: #ecf0f1; }
+      /* Dark Mode Table Fixes */
+      body.dark-mode .dataTables_wrapper .dataTables_length, 
+      body.dark-mode .dataTables_wrapper .dataTables_filter, 
+      body.dark-mode .dataTables_wrapper .dataTables_info, 
+      body.dark-mode .dataTables_wrapper .dataTables_processing, 
+      body.dark-mode .dataTables_wrapper .dataTables_paginate {
+        color: #e0e0e0 !important;
+      }
+      body.dark-mode table.dataTable tbody tr {
+        background-color: #2b2b2b !important;
+        color: #e0e0e0 !important;
+      }
+      body.dark-mode .dataTables_wrapper .dataTables_paginate .paginate_button {
+        color: #e0e0e0 !important; 
+      }
+      
+      /* Tabs */
+      .nav-pills > li.active > a, .nav-pills > li.active > a:focus, .nav-pills > li.active > a:hover {
+        color: #fff;
+        background-color: #337ab7;
+      }
     body.dark-mode h4, body.dark-mode h5 { color: #ecf0f1; }
   ")))
   ,tags$script(HTML('
@@ -257,6 +278,7 @@ ui <- navbarPage(
           selectInput("nmf_factor", "Select Factor", choices=NULL),
           sliderInput("nmf_pt_size", "Point Size (FeaturePlot)", min=0.1, max=3, value=1, step=0.1),
           selectInput("nmf_color", "Color Scale", choices=c("Magma", "Viridis", "Plasma", "Inferno"), selected="Magma"),
+          selectInput("nmf_reduction", "Reduction", choices = c("umap", "tsne", "pca"), selected = "umap"),
           downloadButton("download_nmf_csv", "Download Top Genes")
         )
       ),
@@ -561,34 +583,17 @@ server <- function(input, output, session) {
       if (ext == "rds") {
         obj <- readRDS(path)
       } else if (ext == "h5ad") {
-        # Strategy 1: SeuratDisk (Fast, but fragile)
-        if (requireNamespace("SeuratDisk", quietly = TRUE)) {
-          showNotification("Attempting conversion with SeuratDisk...", type="message", duration=5)
-          dest <- paste0(path, ".h5seurat")
+        # Strategy: Zellkonverter (User Preferred)
+        if (requireNamespace("zellkonverter", quietly = TRUE) && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
+          showNotification("Reading h5ad with zellkonverter...", type="message", duration=2)
           tryCatch({
-            SeuratDisk::Convert(path, dest = dest, overwrite = TRUE)
-            obj <- SeuratDisk::LoadH5Seurat(dest)
+            sce <- zellkonverter::readH5AD(path)
+            obj <- as.Seurat(sce, counts = "X", data = "X")
           }, error = function(e) {
-            showNotification(paste("SeuratDisk failed:", e$message, "Trying fallback..."), type="warning")
-            obj <<- NULL # Signal failure to fallback
-          }, finally = {
-            if(file.exists(dest)) unlink(dest)
+            stop(paste("Zellkonverter loading failed:", e$message))
           })
-        }
-        
-        # Strategy 2: Zellkonverter (Robust, but requires Python env setup)
-        if (is.null(obj)) {
-          if (requireNamespace("zellkonverter", quietly = TRUE) && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
-            showNotification("Attempting conversion with zellkonverter (this may take a while first time)...", type="message", duration=10)
-            tryCatch({
-              sce <- zellkonverter::readH5AD(path)
-              obj <- as.Seurat(sce, counts = "X", data = "X")
-            }, error = function(e) {
-              stop(paste("All loading methods failed. Zellkonverter error:", e$message))
-            })
-          } else {
-            stop("SeuratDisk failed and zellkonverter is not installed for fallback.")
-          }
+        } else {
+          stop("zellkonverter package is missing. Please install it to load .h5ad files.")
         }
       } else {
         stop("Unsupported file extension")
@@ -603,6 +608,18 @@ server <- function(input, output, session) {
       if ("RNA" %in% Assays(obj)) {
         DefaultAssay(obj) <- "RNA"
       }
+      
+      # Safety Check: Run NormalizeData if max value suggests raw counts > 20
+      # Use tryCatch to avoid crashing if memory is tight
+      tryCatch({
+        data_mat <- GetAssayData(obj, layer = "data")
+        if (max(data_mat, na.rm=TRUE) > 20) {
+          showNotification("Detected raw counts. Normalizing data...", type = "message", duration = 5)
+          obj <- NormalizeData(obj)
+        }
+      }, error = function(e) {
+        warning("Normalization check failed: ", e$message)
+      })
       
       # Fix Reduction Names (zellkonverter often uses 'X_umap', 'X_pca')
       for (red in names(obj@reductions)) {
@@ -903,6 +920,7 @@ server <- function(input, output, session) {
       theme_minimal() +
       scale_color_manual(values = c(nonsig_color, sig_color), name = paste0("p-adj < ", pval_thresh)) +
       labs(title = paste("Volcano Plot:", input$de_ident_1, "vs", input$de_ident_2),
+           subtitle = paste("Positive LFC = Upregulated in", input$de_ident_1),
            x = "avg_log2FC", y = "-log10(p-value)")
   })
   
@@ -912,8 +930,11 @@ server <- function(input, output, session) {
   })
   
   output$download_volcano <- downloadHandler(
-    filename = function() { 
-      paste0("Volcano_", input$de_ident_1, "_vs_", input$de_ident_2, "_", Sys.Date(), ".", input$volcano_format) 
+    filename = function() {
+      # Sanitize filename components to prevent download failures
+      i1 <- gsub("[^[:alnum:]]", "_", input$de_ident_1)
+      i2 <- if(is.null(input$de_ident_2)) "Others" else gsub("[^[:alnum:]]", "_", input$de_ident_2)
+      paste0("Volcano_", i1, "_vs_", i2, "_", Sys.Date(), ".", input$volcano_format) 
     },
     content = function(file) {
       req(volcano_plot())
@@ -2048,19 +2069,8 @@ server <- function(input, output, session) {
 
   
   # File Upload Logic
-  observeEvent(input$seurat_file, {
-    req(input$seurat_file)
-    
-    withProgress(message = "Loading Seurat object...", value = 0, {
-      tryCatch({
-        obj <- readRDS(input$seurat_file$datapath)
-        seurat_obj(obj)
-        showNotification("Seurat object loaded successfully!", type = "message")
-      }, error = function(e) {
-        showNotification(paste("Error loading Seurat object:", e$message), type = "error")
-      })
-    })
-  })
+
+
   
   heatmap_obj <- reactiveVal(NULL)
   
@@ -2499,8 +2509,17 @@ server <- function(input, output, session) {
     }
     
     obj$current_factor <- nmf_data[, factor_col]
-    red <- "umap"
-    if (!"umap" %in% Reductions(obj)) red <- "pca"
+    obj$current_factor <- nmf_data[, factor_col]
+    
+    red <- input$nmf_reduction
+    if (is.null(red) || !red %in% Reductions(obj)) {
+      avail <- Reductions(obj)
+      if (length(avail) > 0) red <- avail[1] else red <- NULL
+    }
+    
+    if (is.null(red)) {
+       plot.new(); text(0.5, 0.5, "No reductions (UMAP/tSNE) found."); return()
+    }
     
     FeaturePlot(obj, features = "current_factor", reduction = red, pt.size = input$nmf_pt_size) +
       scale_color_viridis_c(option = tolower(input$nmf_color)) +
@@ -2551,7 +2570,12 @@ server <- function(input, output, session) {
     }
     
     # Determine reduction
-    red <- if ("umap" %in% Reductions(obj)) "umap" else "pca"
+    red <- input$nmf_reduction
+    if (!red %in% Reductions(obj)) {
+      # Fallback if selected reduction doesn't exist
+      avail <- Reductions(obj)
+      if (length(avail) > 0) red <- avail[1] else return(NULL)
+    }
     
     # Create multi-panel FeaturePlot
     ncols <- ceiling(sqrt(length(factors)))

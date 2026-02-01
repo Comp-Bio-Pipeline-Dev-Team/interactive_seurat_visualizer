@@ -9,10 +9,10 @@ install.packages(c(
   "colourpicker", 
   "cowplot", 
   "plotly", 
-  "NMF",
   "remotes", 
   "BiocManager", 
   "MetBrewer", 
+  "pheatmap",
   "viridis",
   "RColorBrewer",
   "scales",
@@ -29,9 +29,11 @@ BiocManager::install(c(
   "enrichplot",       # Enrichment visualization
   "fgsea",            # Fast GSEA
   "org.Hs.eg.db",     # Human annotations
-  "org.Mm.eg.db",     # Mouse annotations
   "DOSE",             # Disease ontology
-  "scRepertoire"      # VDJ Analysis
+  "scRepertoire",     # VDJ Analysis
+  "zellkonverter",    # H5AD Support
+  "SingleCellExperiment",
+  "NMF"               # Gene Programs
 ), update = FALSE)
 
 # Install GitHub packages

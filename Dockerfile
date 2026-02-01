@@ -28,23 +28,25 @@ WORKDIR /app
 
 # Install R packages - Core & CRAN
 # Split installation to leverage caching layers
-RUN R -e "install.packages(c('shiny', 'shinythemes', 'shinyjs', 'ggplot2', 'patchwork', 'cowplot', 'plotly', 'colourpicker', 'MetBrewer', 'viridis', 'RColorBrewer', 'remotes', 'BiocManager', 'scales', 'devtools', 'DT', 'ggrepel', 'forcats', 'assertthat'), repos='https://cloud.r-project.org')"
+# Install R packages - Core & CRAN
+# Split installation to leverage caching layers
+RUN R -e "install.packages(c('shiny', 'shinythemes', 'shinyjs', 'ggplot2', 'patchwork', 'cowplot', 'plotly', 'colourpicker', 'MetBrewer', 'pheatmap', 'viridis', 'RColorBrewer', 'remotes', 'BiocManager', 'scales', 'devtools', 'DT', 'ggrepel', 'forcats', 'assertthat'), repos='https://cloud.r-project.org')"
 
 
 # Install Seurat (separate step closely following core deps)
 RUN R -e "install.packages('Seurat', repos='https://cloud.r-project.org')"
 
-# Install NMF for gene program discovery
-RUN R -e "install.packages('NMF', repos='https://cloud.r-project.org')"
-
 # Install UCell from Bioconductor
 RUN R -e "BiocManager::install('UCell', update=FALSE)"
 
-# Install detailed dependencies for Enrichment Analysis & VDJ
-RUN R -e "BiocManager::install(c('clusterProfiler', 'enrichplot', 'fgsea', 'msigdbr', 'DOSE', 'igraph', 'org.Hs.eg.db', 'org.Mm.eg.db', 'scRepertoire'), update=FALSE)"
+# Install detailed dependencies for Enrichment Analysis & VDJ & NMF
+RUN R -e "BiocManager::install(c('clusterProfiler', 'enrichplot', 'fgsea', 'msigdbr', 'DOSE', 'igraph', 'org.Hs.eg.db', 'org.Mm.eg.db', 'scRepertoire', 'NMF'), update=FALSE)"
 
 # Install SCpubr from GitHub
 RUN R -e "remotes::install_github('enblacar/SCpubr')"
+
+# Install Zellkonverter for robust h5ad support
+RUN R -e "BiocManager::install(c('zellkonverter', 'SingleCellExperiment'), update=FALSE)"
 
 # Copy application files
 COPY app.R /app/
