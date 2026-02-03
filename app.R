@@ -584,11 +584,18 @@ server <- function(input, output, session) {
   # --- DE Reactive Values & Logic ---
   de_results <- reactiveVal(NULL)
   
-  # Update DE metadata column choices
+  # Update DE metadata column choices (categorical only)
   observe({
     req(seurat_obj())
-    meta_cols <- names(seurat_obj()@meta.data)
-    updateSelectInput(session, "de_group_by", choices = meta_cols, selected = "seurat_clusters")
+    obj <- seurat_obj()
+    
+    # Get only categorical metadata columns
+    categorical_cols <- names(obj@meta.data)[
+      sapply(obj@meta.data, function(x) is.factor(x) || is.character(x))
+    ]
+    
+    updateSelectInput(session, "de_group_by", choices = categorical_cols, 
+                     selected = if("seurat_clusters" %in% categorical_cols) "seurat_clusters" else categorical_cols[1])
   })
   
   # Update Ident 1 and Ident 2 based on chosen metadata column
@@ -1425,26 +1432,33 @@ server <- function(input, output, session) {
   lapply(c("p1","p2","p3","p4"), function(id) {
     ns <- function(x) paste0(id, "-", x)
     
-    output[[ns("dynamic_ui")]] <- renderUI({
+    output[[ns("plot_settings_ui")]] <- renderUI({
       req(seurat_obj())
       ptype <- input[[ns("plot_type")]]
-      reds <- names(seurat_obj()@reductions)
-      metas <- c("Default", names(seurat_obj()@meta.data))
+      req(ptype)
+      
+      metas <- c("Default", colnames(seurat_obj()@meta.data))
+      reds <- names(seurat_obj()@assays)
       assays <- names(seurat_obj()@assays)
+      
+      # Get only categorical metadata columns for group_by and split_by
+      categorical_metas <- c("Default", colnames(seurat_obj()@meta.data)[
+        sapply(seurat_obj()@meta.data, function(x) is.factor(x) || is.character(x))
+      ])
       
       # Get all features (genes + metadata for UCell)
       all_features <- c(rownames(seurat_obj()), colnames(seurat_obj()@meta.data))
       
       if (ptype == "ClusterDistrBar") {
         tagList(
-          selectInput(ns("cdb_group1"), "X Axis (Sample)", choices=metas[-1]),
-          selectInput(ns("cdb_group2"), "Fill (Cluster)", choices=metas[-1])
+          selectInput(ns("cdb_group1"), "X Axis (Sample)", choices=categorical_metas[-1]),
+          selectInput(ns("cdb_group2"), "Fill (Cluster)", choices=categorical_metas[-1])
         )
       } else {
         tagList(
           if(ptype %in% c("DimPlot","FeaturePlot")) selectInput(ns("reduction"), "Reduction", choices=reds),
-          if(ptype %in% c("DimPlot","ViolinPlot","DotPlot")) selectInput(ns("group_by"), "Group By", choices=metas),
-          selectInput(ns("split_by"), "Split By", choices=c("None", metas[-1])),
+          if(ptype %in% c("DimPlot","ViolinPlot","DotPlot")) selectInput(ns("group_by"), "Group By", choices=categorical_metas),
+          selectInput(ns("split_by"), "Split By", choices=c("None", categorical_metas[-1])),
           
           # Assay and Layer selection for plots that use expression data
           if(ptype %in% c("FeaturePlot","ViolinPlot","DotPlot")) tagList(
@@ -1556,7 +1570,20 @@ server <- function(input, output, session) {
     obj <- seurat_obj()
     all_features <- c(rownames(obj), colnames(obj@meta.data))
     updateSelectizeInput(session, "hm_features", choices = all_features, server = TRUE)
-    updateSelectInput(session, "hm_group_by", choices = names(obj@meta.data), selected = "seurat_clusters")
+  })
+  
+  # Update heatmap metadata choices (categorical only)
+  observe({
+    req(seurat_obj())
+    obj <- seurat_obj()
+    
+    # Get only categorical metadata columns
+    categorical_cols <- names(obj@meta.data)[
+      sapply(obj@meta.data, function(x) is.factor(x) || is.character(x))
+    ]
+    
+    updateSelectInput(session, "hm_group_by", choices = categorical_cols, 
+                     selected = if("seurat_clusters" %in% categorical_cols) "seurat_clusters" else categorical_cols[1])
   })
   
   # Manual annotation color UI
