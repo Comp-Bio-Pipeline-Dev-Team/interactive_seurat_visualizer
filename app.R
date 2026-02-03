@@ -37,6 +37,8 @@ source("plot_dimension_reduction.R")
 source("plot_feature.R")
 source("plot_violin.R")
 source("plot_dot.R")
+source("ui_landing_page.R")
+source("server_landing_page.R")
 
 # --- UI Helper ---
 plotControlUI <- function(id) {
@@ -95,26 +97,41 @@ plotControlUI <- function(id) {
   )
 }
 
-ui <- navbarPage(
+
+ui <- fluidPage(
+  uiOutput("main_ui")
+)
+
+# Main app navbar (used when object is loaded)
+main_app_navbar <- navbarPage(
   title = "Seurat Interactive Visualizer",
   theme = shinytheme("flatly"),
   id = "main_nav",
   
-  header = tags$head(tags$style(HTML("
-    .plot-container { border: 1px solid #ddd; padding: 10px; margin: 10px; background: white; border-radius: 4px; }
-    .active-plot { border: 3px solid #2c3e50 !important; box-shadow: 0 0 10px rgba(44,62,80,0.3); }
-    .nav-tabs { font-weight: bold; }
-  "))),
+  header = tagList(
+    tags$head(tags$style(HTML("
+      .plot-container { border: 1px solid #ddd; padding: 10px; margin: 10px; background: white; border-radius: 4px; }
+      .active-plot { border: 3px solid #2c3e50 !important; box-shadow: 0 0 10px rgba(44,62,80,0.3); }
+      .nav-tabs { font-weight: bold; }
+    "))),
+    # Add "Load New Data" button to navbar
+    tags$script(HTML("
+      $(document).ready(function() {
+        var btn = '<li><a href=\"#\" id=\"load_new_data_btn\" class=\"btn btn-warning\" style=\"margin: 8px;\">Load New Data</a></li>';
+        $('.navbar-nav').append(btn);
+      });
+      $(document).on('click', '#load_new_data_btn', function(e) {
+        e.preventDefault();
+        Shiny.setInputValue('load_new_data', Math.random());
+      });
+    "))
+  ),
   
   tabPanel("Visualization",
   
   sidebarLayout(
     sidebarPanel(
       width = 3,
-      fileInput("seurat_file", "Upload Seurat (.rds or .h5ad)", accept = c(".rds", ".h5ad")),
-      radioButtons("ensembl_species", "Species", choices = c("Human", "Mouse"), inline = TRUE),
-      actionButton("convert_ensembl", "Convert Ensembl IDs to Symbols", icon = icon("dna"), class = "btn-info btn-block"),
-      br(),
       
       # JavaScript to highlight active plot and switch tabs
       tags$script(HTML("
@@ -405,82 +422,64 @@ server <- function(input, output, session) {
   
   original_obj <- reactiveVal(NULL)
   seurat_obj <- reactiveVal(NULL)
+  app_ready <- reactiveVal(FALSE)  # Controls whether to show main app or landing page
   
+  # Conditional UI rendering
+  output$main_ui <- renderUI({
+    if (app_ready()) {
+      main_app_navbar
+    } else {
+      landing_page_ui()
+    }
+  })
+  
+  # Handle "Load New Data" button click
+  observeEvent(input$load_new_data, {
+    seurat_obj(NULL)
+    original_obj(NULL)
+    app_ready(FALSE)
+  })
+
+  # === LANDING PAGE SERVER LOGIC ===
+  # (Sourced from server_landing_page.R)
+  
+  
+  
+  # Upload Seurat object (.rds only)
   observeEvent(input$seurat_file, {
     req(input$seurat_file)
-    tryCatch({
-      path <- input$seurat_file$datapath
-      ext <- tolower(tools::file_ext(input$seurat_file$name))
-      
-      obj <- NULL
-      if (ext == "rds") {
-        obj <- readRDS(path)
-      } else if (ext == "h5ad") {
-        # Strategy 1: SeuratDisk (Fast, but fragile)
-        if (requireNamespace("SeuratDisk", quietly = TRUE)) {
-          showNotification("Attempting conversion with SeuratDisk...", type="message", duration=5)
-          dest <- paste0(path, ".h5seurat")
-          tryCatch({
-            SeuratDisk::Convert(path, dest = dest, overwrite = TRUE)
-            obj <- SeuratDisk::LoadH5Seurat(dest)
-          }, error = function(e) {
-            showNotification(paste("SeuratDisk failed:", e$message, "Trying fallback..."), type="warning")
-            obj <<- NULL # Signal failure to fallback
-          }, finally = {
-            if(file.exists(dest)) unlink(dest)
-          })
+    withProgress(message = "Loading Seurat object...", value = 0, {
+      tryCatch({
+        path <- input$seurat_file$datapath
+        ext <- tolower(tools::file_ext(input$seurat_file$name))
+        
+        if (ext != "rds") {
+          showNotification("Only .rds files are supported", type="error")
+          return()
         }
         
-        # Strategy 2: Zellkonverter (Robust, but requires Python env setup)
-        if (is.null(obj)) {
-          if (requireNamespace("zellkonverter", quietly = TRUE) && requireNamespace("SingleCellExperiment", quietly = TRUE)) {
-            showNotification("Attempting conversion with zellkonverter (this may take a while first time)...", type="message", duration=10)
-            tryCatch({
-              sce <- zellkonverter::readH5AD(path)
-              obj <- as.Seurat(sce, counts = "X", data = "X")
-            }, error = function(e) {
-              stop(paste("All loading methods failed. Zellkonverter error:", e$message))
-            })
-          } else {
-            stop("SeuratDisk failed and zellkonverter is not installed for fallback.")
-          }
+        incProgress(0.3, detail = "Reading file...")
+        obj <- readRDS(path)
+        
+        incProgress(0.6, detail = "Validating object...")
+        if (!inherits(obj, "Seurat")) {
+          showNotification("File is not a valid Seurat object", type="error")
+          return()
         }
-      } else {
-        stop("Unsupported file extension")
-      }
-      
-      # --- Seurat Object Normalization ---
-      # Fix Assay Names (zellkonverter often uses 'originalexp')
-      if ("originalexp" %in% Assays(obj) && !"RNA" %in% Assays(obj)) {
-        obj <- RenameAssays(obj, originalexp = "RNA")
-      }
-      # If 'RNA' is still not default (e.g. it was 'Spatial' or something else), force it if 'RNA' exists
-      if ("RNA" %in% Assays(obj)) {
-        DefaultAssay(obj) <- "RNA"
-      }
-      
-      # Fix Reduction Names (zellkonverter often uses 'X_umap', 'X_pca')
-      for (red in names(obj@reductions)) {
-        if (red == "X_umap") {
-          obj@reductions$umap <- obj@reductions$X_umap
-          obj@reductions$X_umap <- NULL
-          Key(obj@reductions$umap) <- "umap_"
-        } else if (red == "X_pca") {
-          obj@reductions$pca <- obj@reductions$X_pca
-          obj@reductions$X_pca <- NULL
-          Key(obj@reductions$pca) <- "PC_"
-        } else if (red == "X_tsne") {
-          obj@reductions$tsne <- obj@reductions$X_tsne
-          obj@reductions$X_tsne <- NULL
-          Key(obj@reductions$tsne) <- "tSNE_"
+        
+        # Ensure RNA assay is default
+        if ("RNA" %in% Assays(obj)) {
+          DefaultAssay(obj) <- "RNA"
         }
-      }
-      # -----------------------------------
-      
-      original_obj(obj)
-      seurat_obj(obj)
-      showNotification("Loaded successfully!", type="message", duration=3)
-    }, error = function(e) showNotification(paste("Error:", e$message), type="error"))
+        
+        incProgress(0.9, detail = "Finalizing...")
+        original_obj(obj)
+        seurat_obj(obj)
+        showNotification("Loaded successfully!", type="message", duration=3)
+      }, error = function(e) {
+        showNotification(paste("Error loading file:", e$message), type="error")
+      })
+    })
   })
   
   # --- Convert Ensembl IDs ---

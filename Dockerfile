@@ -44,6 +44,8 @@ COPY plot_dimension_reduction.R /app/
 COPY plot_feature.R /app/
 COPY plot_violin.R /app/
 COPY plot_dot.R /app/
+COPY ui_landing_page.R /app/
+COPY server_landing_page.R /app/
 COPY setup.R /app/
 COPY generate_dummy_seurat.R /app/
 COPY README.md /app/
