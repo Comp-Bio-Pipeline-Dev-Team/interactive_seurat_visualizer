@@ -23,16 +23,15 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Install R packages - Core & CRAN
-# TODO: Once renv.lock is properly generated with renv::snapshot(), 
-# replace this section with renv::restore()
-RUN R -e "install.packages(c('shiny', 'shinythemes', 'ggplot2', 'patchwork', 'cowplot', 'plotly', 'colourpicker', 'MetBrewer', 'viridis', 'RColorBrewer', 'BiocManager', 'scales', 'DT'), repos='https://cloud.r-project.org')"
+# Install renv
+RUN R -e "install.packages('renv', repos='https://cloud.r-project.org')"
 
-# Install Seurat (separate step for better caching)
-RUN R -e "install.packages('Seurat', repos='https://cloud.r-project.org')"
+# Copy renv.lock file
+COPY renv.lock /app/
 
-# Install UCell from Bioconductor
-RUN R -e "BiocManager::install('UCell', update=FALSE)"
+# Initialize renv and restore packages from lockfile
+# This installs all 182 packages with exact versions specified in renv.lock
+RUN R -e "renv::restore(prompt = FALSE)"
 
 # Copy application files
 COPY app.R /app/
