@@ -35,7 +35,6 @@ source("plot_feature.R")
 source("plot_violin.R")
 source("plot_dot.R")
 source("ui_landing_page.R")
-source("server_landing_page.R")
 
 # --- UI Helper ---
 plotControlUI <- function(id) {
@@ -408,6 +407,9 @@ server <- function(input, output, session) {
   original_obj <- reactiveVal(NULL)
   seurat_obj <- reactiveVal(NULL)
   app_ready <- reactiveVal(FALSE)  # Controls whether to show main app or landing page
+  
+  # Source landing page server logic (needs access to output, input, session)
+  source("server_landing_page.R", local = TRUE)
   
   # Conditional UI rendering
   output$main_ui <- renderUI({
