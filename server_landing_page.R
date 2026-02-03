@@ -164,11 +164,98 @@ output$ensembl_conversion_ui <- renderUI({
                  selected = "Human"),
     actionButton("convert_ensembl_landing", "Convert Ensembl IDs to Symbols", 
                  icon = icon("dna"), 
-                 class = "btn-info"),
-    p(strong("Note:"), "Ensembl conversion will be implemented in the next iteration.", 
-      style = "color: #95a5a6; font-style: italic; margin-top: 10px;")
+                 class = "btn-info")
   )
 })
+
+# Handle Ensembl ID conversion
+observeEvent(input$convert_ensembl_landing, {
+  req(seurat_obj())
+  
+  species <- input$ensembl_species
+  db_pkg <- if(species == "Human") "org.Hs.eg.db" else "org.Mm.eg.db"
+  
+  # Check if required packages are installed
+  if (!requireNamespace(db_pkg, quietly = TRUE)) {
+    showNotification(paste(db_pkg, "is not installed. Please install it to use this feature."), 
+                     type="error", duration = 5)
+    return()
+  }
+  if (!requireNamespace("AnnotationDbi", quietly = TRUE)) {
+    showNotification("AnnotationDbi is not installed. Please install it to use this feature.", 
+                     type="error", duration = 5)
+    return()
+  }
+  
+  withProgress(message = "Converting Ensembl IDs...", value = 0, {
+    tryCatch({
+      # Load the package dynamically
+      library(db_pkg, character.only = TRUE)
+      org_db <- get(db_pkg)
+      
+      obj <- seurat_obj()
+      current_ids <- rownames(obj)
+      
+      # Detect if IDs are Ensembl format (start with ENS)
+      ensembl_pattern <- grepl("^ENS", current_ids)
+      if (sum(ensembl_pattern) == 0) {
+        showNotification("No Ensembl IDs detected in feature names.", 
+                        type="warning", duration = 4)
+        return()
+      }
+      
+      # Map IDs
+      incProgress(0.3, detail = paste("Mapping", species, "Ensembl to Symbols"))
+      mapped_symbols <- AnnotationDbi::mapIds(
+        org_db,
+        keys = current_ids,
+        column = "SYMBOL",
+        keytype = "ENSEMBL",
+        multiVals = "first"
+      )
+      
+      # Identify features that successfully mapped
+      mapped_indices <- !is.na(mapped_symbols)
+      num_mapped <- sum(mapped_indices)
+      
+      if (num_mapped == 0) {
+        showNotification("No Ensembl IDs could be mapped to gene symbols.", 
+                        type="warning", duration = 4)
+        return()
+      }
+      
+      # Create new names: Use symbol if mapped, else keep original ID
+      incProgress(0.6, detail = "Creating new feature names")
+      new_names <- current_ids
+      new_names[mapped_indices] <- mapped_symbols[mapped_indices]
+      
+      # Handle duplicates by making names unique
+      new_names <- make.unique(new_names)
+      
+      # Update feature names in all assays
+      incProgress(0.8, detail = "Updating Seurat object")
+      for (assay_name in Assays(obj)) {
+        assay_obj <- obj[[assay_name]]
+        rownames(assay_obj) <- new_names
+        obj[[assay_name]] <- assay_obj
+      }
+      
+      # Update seurat_obj
+      seurat_obj(obj)
+      
+      showNotification(
+        paste("Successfully converted", num_mapped, "Ensembl IDs to gene symbols!"),
+        type = "message",
+        duration = 5
+      )
+      
+    }, error = function(e) {
+      showNotification(paste("Error during conversion:", e$message), 
+                      type="error", duration = 5)
+    })
+  })
+})
+
 
 # Proceed Button UI
 output$proceed_button_ui <- renderUI({
