@@ -1369,6 +1369,10 @@ server <- function(input, output, session) {
       # ViolinPlot module
       params <- validate_violin_plot_params(input, ns, obj)
       if (!is.null(params)) {
+        # Use show_points checkbox to control point display
+        show_points <- input[[ns("show_points")]]
+        violin_pt_size <- if (!is.null(show_points) && show_points) pt_size else 0
+        
         p <- plot_violin(
           obj = obj,
           features = params$features,
@@ -1377,7 +1381,7 @@ server <- function(input, output, session) {
           assay = assay,
           layer = layer,
           colors = colors,
-          pt_size = pt_size,
+          pt_size = violin_pt_size,
           title = if(isTruthy(title)) title else NULL,
           show_legend = show_legend,
           flip = flip
@@ -1406,6 +1410,34 @@ server <- function(input, output, session) {
           title = if(isTruthy(title)) title else NULL,
           show_legend = show_legend,
           flip = flip
+        )
+      }
+    }
+    
+    # Apply common customizations to all plots
+    if (!is.null(p)) {
+      # Apply legend position
+      legend_pos <- input[[ns("legend_position")]]
+      if (!is.null(legend_pos) && !is.null(input[[ns("show_legend")]]) && input[[ns("show_legend")]]) {
+        p <- p + ggplot2::theme(legend.position = legend_pos)
+      }
+      
+      # Apply axis customizations
+      xlab_custom <- input[[ns("xlab")]]
+      ylab_custom <- input[[ns("ylab")]]
+      axis_size <- input[[ns("axis_text_size")]]
+      
+      if (!is.null(xlab_custom) && nchar(xlab_custom) > 0) {
+        p <- p + ggplot2::labs(x = xlab_custom)
+      }
+      if (!is.null(ylab_custom) && nchar(ylab_custom) > 0) {
+        p <- p + ggplot2::labs(y = ylab_custom)
+      }
+      if (!is.null(axis_size)) {
+        p <- p + ggplot2::theme(
+          axis.text = ggplot2::element_text(size = axis_size),
+          axis.text.x = ggplot2::element_text(size = axis_size),
+          axis.text.y = ggplot2::element_text(size = axis_size)
         )
       }
     }
@@ -1488,10 +1520,36 @@ server <- function(input, output, session) {
             selectizeInput(ns("feature"), "Feature", choices=NULL, options=list(
               placeholder = 'Type to search genes or metadata...',
               onInitialize = I('function() { this.setValue(""); }')
-            ))
+            )),
+          
+          # Legend Controls (all plot types)
+          hr(),
+          h5("Legend & Axes"),
+          checkboxInput(ns("show_legend"), "Show Legend", value = TRUE),
+          conditionalPanel(
+            condition = sprintf("input['%s']", ns("show_legend")),
+            selectInput(ns("legend_position"), "Legend Position",
+                       choices = c("Right" = "right", "Left" = "left", 
+                                  "Top" = "top", "Bottom" = "bottom"),
+                       selected = "right")
+          ),
+          
+          # Axis Customization (all plot types)
+          textInput(ns("xlab"), "X-axis Label (optional)", value = ""),
+          textInput(ns("ylab"), "Y-axis Label (optional)", value = ""),
+          sliderInput(ns("axis_text_size"), "Axis Text Size", 
+                     min = 8, max = 20, value = 12, step = 1),
+          
+          # Violin Plot Specific Options
+          if(ptype == "ViolinPlot") tagList(
+            hr(),
+            h5("Violin Plot Options"),
+            checkboxInput(ns("show_points"), "Show Individual Points", value = TRUE)
+          )
         )
       }
     })
+    
     
     # Update feature choices server-side for autocomplete
     observe({
