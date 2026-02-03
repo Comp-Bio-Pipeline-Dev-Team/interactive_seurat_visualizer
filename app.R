@@ -1470,7 +1470,7 @@ server <- function(input, output, session) {
       req(ptype)
       
       metas <- c("Default", colnames(seurat_obj()@meta.data))
-      reds <- names(seurat_obj()@assays)
+      reds <- names(seurat_obj()@reductions)  # Fixed: use @reductions not @assays
       assays <- names(seurat_obj()@assays)
       
       # Get only categorical metadata columns for group_by and split_by
