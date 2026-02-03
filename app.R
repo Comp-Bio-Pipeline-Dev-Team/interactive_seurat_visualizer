@@ -1464,7 +1464,7 @@ server <- function(input, output, session) {
   lapply(c("p1","p2","p3","p4"), function(id) {
     ns <- function(x) paste0(id, "-", x)
     
-    output[[ns("plot_settings_ui")]] <- renderUI({
+    output[[ns("dynamic_ui")]] <- renderUI({
       req(seurat_obj())
       ptype <- input[[ns("plot_type")]]
       req(ptype)
