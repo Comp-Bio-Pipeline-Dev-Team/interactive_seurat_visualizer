@@ -23,18 +23,18 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Install R packages - Core & CRAN
-# Split installation to leverage caching layers
-RUN R -e "install.packages(c('shiny', 'shinythemes', 'ggplot2', 'patchwork', 'cowplot', 'plotly', 'colourpicker', 'MetBrewer', 'viridis', 'RColorBrewer', 'remotes', 'BiocManager', 'scales', 'devtools', 'DT', 'ggrepel'), repos='https://cloud.r-project.org')"
+# Install renv for reproducible package management
+RUN R -e "install.packages('renv', repos='https://cloud.r-project.org')"
 
-# Install Seurat (separate step closely following core deps)
-RUN R -e "install.packages('Seurat', repos='https://cloud.r-project.org')"
+# Copy renv files first for better caching
+COPY renv.lock /app/
+COPY .Rprofile /app/
+COPY renv/activate.R /app/renv/
+COPY renv/settings.json /app/renv/
 
-# Install UCell from Bioconductor
-RUN R -e "BiocManager::install('UCell', update=FALSE)"
-
-# Install SCpubr from GitHub
-RUN R -e "remotes::install_github('enblacar/SCpubr')"
+# Restore R packages from renv.lock
+# This ensures reproducible builds with exact package versions
+RUN R -e "renv::restore()"
 
 # Copy application files
 COPY app.R /app/
