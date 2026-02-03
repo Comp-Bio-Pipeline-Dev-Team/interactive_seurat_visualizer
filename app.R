@@ -41,43 +41,67 @@ plotControlUI <- function(id) {
   ns <- NS(id)
   tagList(
     h4(paste("Settings for Plot", gsub("p", "", id))), 
-    selectInput(ns("plot_type"), "Plot Type", 
-                choices = c("DimPlot", "FeaturePlot", "ViolinPlot", "DotPlot", "ClusterDistrBar")),
     
-    uiOutput(ns("dynamic_ui")), 
-    
-    hr(),
-    h5("Appearance & Colors"),
-    fluidRow(
-      column(6, selectInput(ns("title_align"), "Title Align", choices = c("Left"=0, "Center"=0.5, "Right"=1), selected=0.5)),
-      column(6, uiOutput(ns("pt_size_ui")))
+    # Collapsible Section: Plot Type & Data
+    tags$div(class = "panel panel-default",
+      tags$div(class = "panel-heading", style = "cursor: pointer;", onclick = sprintf("$('#%s-section1').collapse('toggle')", id),
+        tags$h5(class = "panel-title",
+          tags$i(class = "glyphicon glyphicon-chevron-down", style = "margin-right: 5px;"),
+          "Plot Type & Data"
+        )
+      ),
+      tags$div(id = paste0(id, "-section1"), class = "panel-collapse collapse in",
+        tags$div(class = "panel-body",
+          selectInput(ns("plot_type"), "Plot Type", 
+                     choices = c("DimPlot", "FeaturePlot", "ViolinPlot", "DotPlot", "ClusterDistrBar")),
+          uiOutput(ns("dynamic_ui"))
+        )
+      )
     ),
     
-    # Orientation toggle for specific plot types
-    uiOutput(ns("orientation_ui")),
-    
-    selectInput(ns("color_source"), "Color Source", choices = c("Default", "Palette", "Manual")),
-    conditionalPanel(
-      condition = "input.color_source == 'Palette'", ns = ns,
-      selectInput(ns("palette_name"), "Palette", 
-                  choices = list(
-                    "Viridis" = c("viridis", "magma", "plasma", "inferno", "cividis"),
-                    "RColorBrewer" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Accent"),
-                    "MetBrewer" = names(MetBrewer::MetPalettes)
-                  ))
-    ),
-    conditionalPanel(
-      condition = "input.color_source == 'Manual'", ns = ns,
-      uiOutput(ns("manual_color_ui"))
-    ),
-    
-    hr(),
-    h5("Style & Advanced"),
-    uiOutput(ns("plot_style_ui")),  # Dynamic based on plot type
-    
-    textInput(ns("custom_title"), "Custom Title", ""),
-    numericInput(ns("title_size"), "Title Size", value = 16, min=8, max=30),
-    checkboxInput(ns("show_legend"), "Show Legend", value = TRUE)
+    # Collapsible Section: Appearance & Colors
+    tags$div(class = "panel panel-default",
+      tags$div(class = "panel-heading", style = "cursor: pointer;", onclick = sprintf("$('#%s-section2').collapse('toggle')", id),
+        tags$h5(class = "panel-title",
+          tags$i(class = "glyphicon glyphicon-chevron-right", style = "margin-right: 5px;"),
+          "Appearance & Colors"
+        )
+      ),
+      tags$div(id = paste0(id, "-section2"), class = "panel-collapse collapse",
+        tags$div(class = "panel-body",
+          fluidRow(
+            column(6, selectInput(ns("title_align"), "Title Align", choices = c("Left"=0, "Center"=0.5, "Right"=1), selected=0.5)),
+            column(6, uiOutput(ns("pt_size_ui")))
+          ),
+          
+          # Orientation toggle for specific plot types
+          uiOutput(ns("orientation_ui")),
+          
+          selectInput(ns("color_source"), "Color Source", choices = c("Default", "Palette", "Manual")),
+          conditionalPanel(
+            condition = sprintf("input['%s'] == 'Palette'", ns("color_source")),
+            selectInput(ns("palette_choice"), "Palette", 
+                       choices = list(
+                         "Viridis" = c("viridis", "magma", "plasma", "inferno", "cividis"),
+                         "RColorBrewer" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Accent"),
+                         "MetBrewer" = names(MetBrewer::MetPalettes)
+                       ))
+          ),
+          conditionalPanel(
+            condition = sprintf("input['%s'] == 'Manual'", ns("color_source")),
+            uiOutput(ns("manual_color_ui"))
+          ),
+          
+          selectInput(ns("plot_style"), "Plot Style", choices = c("Static (ggplot2)", "Interactive (plotly)")),
+          
+          textInput(ns("custom_title"), "Custom Title (optional)", value = ""),
+          fluidRow(
+            column(6, numericInput(ns("title_size"), "Title Size", value = 14, min = 8, max = 30)),
+            column(6, checkboxInput(ns("show_legend"), "Show Legend", value = TRUE))
+          )
+        )
+      )
+    )
   )
 }
 
@@ -191,6 +215,18 @@ main_app_navbar <- navbarPage(
             $('.plot-container').removeClass('active-plot');
             $(this).addClass('active-plot');
           }
+        });
+        
+        // Accordion chevron toggle
+        $(document).on('shown.bs.collapse', '.panel-collapse', function() {
+          $(this).prev('.panel-heading').find('.glyphicon')
+            .removeClass('glyphicon-chevron-right')
+            .addClass('glyphicon-chevron-down');
+        });
+        $(document).on('hidden.bs.collapse', '.panel-collapse', function() {
+          $(this).prev('.panel-heading').find('.glyphicon')
+            .removeClass('glyphicon-chevron-down')
+            .addClass('glyphicon-chevron-right');
         });
       ")),
       
