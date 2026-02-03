@@ -8,14 +8,21 @@ install.packages(c(
   "colourpicker", 
   "cowplot", 
   "plotly", 
-  "remotes", 
-  "BiocManager", 
-  "MetBrewer", 
+  "shiny",
+  "Seurat",
+  "ggplot2",
+  "patchwork",
+  "shinythemes",
+  "colourpicker",
+  "cowplot",
+  "plotly",
+  "remotes",
+  "BiocManager",
+  "MetBrewer",
   "viridis",
   "RColorBrewer",
   "scales",
   "DT",
-  "ggrepel",
   "msigdbr",  # MSigDB gene sets
   "igraph"    # For network plots
 ))
@@ -29,7 +36,5 @@ BiocManager::install(c(
   "org.Hs.eg.db",     # Human annotations
   "org.Mm.eg.db",     # Mouse annotations
   "DOSE"              # Disease ontology
-), update = FALSE)
-
 # Install GitHub packages
 remotes::install_github("enblacar/SCpubr")

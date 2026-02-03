@@ -10,15 +10,12 @@ library(MetBrewer)
 library(viridis)
 library(RColorBrewer)
 library(DT)
-library(ggrepel)
 
 # Optional Libraries
 has_ucell <- requireNamespace("UCell", quietly = TRUE)
-has_scpubr <- requireNamespace("SCpubr", quietly = TRUE)
 has_enrichment <- requireNamespace("clusterProfiler", quietly = TRUE) && 
                   requireNamespace("enrichplot", quietly = TRUE)
 if (has_ucell) library(UCell)
-if (has_scpubr) library(SCpubr)
 if (has_enrichment) {
   library(clusterProfiler)
   library(enrichplot)
@@ -78,18 +75,6 @@ plotControlUI <- function(id) {
     hr(),
     h5("Style & Advanced"),
     uiOutput(ns("plot_style_ui")),  # Dynamic based on plot type
-    
-    # SCpubr-specific controls
-    conditionalPanel(
-      condition = "input.plot_style == 'SCpubr'", ns = ns,
-      numericInput(ns("scpubr_font_size"), "Base Font Size", value = 14, min = 8, max = 24),
-      checkboxInput(ns("scpubr_border"), "Add Cell Borders", value = TRUE),
-      selectInput(ns("scpubr_legend_pos"), "Legend Position", 
-                  choices = c("bottom", "top", "left", "right", "none"), selected = "bottom"),
-      numericInput(ns("scpubr_raster_dpi"), "Raster DPI (for large datasets)", value = 2048, min = 72, max = 4096),
-      selectInput(ns("scpubr_viridis_dir"), "Viridis Direction", 
-                  choices = c("Dark = Low (1)" = 1, "Dark = High (-1)" = -1), selected = 1)
-    ),
     
     textInput(ns("custom_title"), "Custom Title", ""),
     numericInput(ns("title_size"), "Title Size", value = 16, min=8, max=30),
@@ -1522,21 +1507,11 @@ server <- function(input, output, session) {
               condition = "input.show_counts", ns = ns,
               sliderInput(ns("count_size"), "Count Label Size", min=2, max=8, value=3, step=0.5)
             )
-          )
-        )
-      }
     })
     
-    # Plot style UI - hide SCpubr for ClusterDistrBar
+    # Plot style UI
     output[[ns("plot_style_ui")]] <- renderUI({
-      ptype <- input[[ns("plot_type")]]
-      if (is.null(ptype) || ptype == "ClusterDistrBar") {
-        # No SCpubr for ClusterDistrBar
-        selectInput(ns("plot_style"), "Plot Style", choices = c("Standard"))
-      } else {
-        selectInput(ns("plot_style"), "Plot Style", 
-                    choices = c("Standard", if(has_scpubr) "SCpubr" else NULL))
-      }
+      selectInput(ns("plot_style"), "Plot Style", choices = c("Standard"))
     })
     
     # Manual color UI
