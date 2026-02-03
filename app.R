@@ -1483,6 +1483,7 @@ server <- function(input, output, session) {
     observe({
       req(seurat_obj())
       ptype <- input[[ns("plot_type")]]
+      req(ptype)  # Ensure ptype is not NULL
       if (ptype %in% c("FeaturePlot","ViolinPlot","DotPlot")) {
         all_features <- c(rownames(seurat_obj()), colnames(seurat_obj()@meta.data))
         updateSelectizeInput(session, ns("feature"), choices=all_features, server = TRUE)
