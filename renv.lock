@@ -4,7 +4,7 @@
     "Repositories": [
       {
         "Name": "CRAN",
-        "URL": "https://p3m.dev/cran/2024-06-13"
+        "URL": "https://cloud.r-project.org"
       }
     ]
   },
