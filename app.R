@@ -40,7 +40,7 @@ source("ui_landing_page.R")
 plotControlUI <- function(id) {
   ns <- NS(id)
   tagList(
-    h4(paste("Settings for", id)), 
+    h4(paste("Settings for Plot", gsub("p", "", id))), 
     selectInput(ns("plot_type"), "Plot Type", 
                 choices = c("DimPlot", "FeaturePlot", "ViolinPlot", "DotPlot", "ClusterDistrBar")),
     
@@ -94,8 +94,51 @@ main_app_navbar <- navbarPage(
   
   header = tagList(
     tags$head(tags$style(HTML("
-      .plot-container { border: 1px solid #ddd; padding: 10px; margin: 10px; background: white; border-radius: 4px; }
-      .active-plot { border: 3px solid #2c3e50 !important; box-shadow: 0 0 10px rgba(44,62,80,0.3); }
+      .plot-container {
+        border: 2px solid transparent;
+        transition: border-color 0.3s;
+      }
+      .plot-container.active-plot {
+        border-color: #3498db;
+        box-shadow: 0 0 10px rgba(52, 152, 219, 0.3);
+      }
+      
+      /* Independent sidebar scrolling */
+      .sidebar {
+        position: fixed;
+        top: 50px;
+        left: 0;
+        height: calc(100vh - 50px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        width: 25%;
+        background-color: #f5f5f5;
+        padding: 15px;
+        z-index: 100;
+      }
+      
+      .main-content {
+        margin-left: 25%;
+        padding: 15px;
+      }
+      
+      /* Smooth scrolling for sidebar */
+      .sidebar::-webkit-scrollbar {
+        width: 8px;
+      }
+      
+      .sidebar::-webkit-scrollbar-track {
+        background: #f1f1f1;
+      }
+      
+      .sidebar::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 4px;
+      }
+      
+      .sidebar::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
       .nav-tabs { font-weight: bold; }
     "))),
     # Add "Load New Data" button to navbar
@@ -116,6 +159,7 @@ main_app_navbar <- navbarPage(
   sidebarLayout(
     sidebarPanel(
       width = 3,
+      class = "sidebar",
       
       # JavaScript to highlight active plot and switch tabs
       tags$script(HTML("
@@ -189,6 +233,7 @@ main_app_navbar <- navbarPage(
     
     mainPanel(
       width = 9,
+      class = "main-content",
       textOutput("obj_info"),
       fluidRow(
         column(6, 
