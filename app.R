@@ -98,7 +98,22 @@ plotControlUI <- function(id) {
           fluidRow(
             column(6, numericInput(ns("title_size"), "Title Size", value = 14, min = 8, max = 30)),
             column(6, checkboxInput(ns("show_legend"), "Show Legend", value = TRUE))
-          )
+          ),
+          
+          # Legend & Axes Controls
+          hr(),
+          h5("Legend & Axes"),
+          conditionalPanel(
+            condition = sprintf("input['%s']", ns("show_legend")),
+            selectInput(ns("legend_position"), "Legend Position",
+                       choices = c("Right" = "right", "Left" = "left", 
+                                  "Top" = "top", "Bottom" = "bottom"),
+                       selected = "right")
+          ),
+          textInput(ns("xlab"), "X-axis Label (optional)", value = ""),
+          textInput(ns("ylab"), "Y-axis Label (optional)", value = ""),
+          sliderInput(ns("axis_text_size"), "Axis Text Size", 
+                     min = 8, max = 20, value = 12, step = 1)
         )
       )
     )
@@ -1602,24 +1617,6 @@ server <- function(input, output, session) {
               placeholder = 'Type to search genes or metadata...',
               onInitialize = I('function() { this.setValue(""); }')
             )),
-          
-          # Legend Controls (all plot types)
-          hr(),
-          h5("Legend & Axes"),
-          checkboxInput(ns("show_legend"), "Show Legend", value = TRUE),
-          conditionalPanel(
-            condition = sprintf("input['%s']", ns("show_legend")),
-            selectInput(ns("legend_position"), "Legend Position",
-                       choices = c("Right" = "right", "Left" = "left", 
-                                  "Top" = "top", "Bottom" = "bottom"),
-                       selected = "right")
-          ),
-          
-          # Axis Customization (all plot types)
-          textInput(ns("xlab"), "X-axis Label (optional)", value = ""),
-          textInput(ns("ylab"), "Y-axis Label (optional)", value = ""),
-          sliderInput(ns("axis_text_size"), "Axis Text Size", 
-                     min = 8, max = 20, value = 12, step = 1),
           
           # Violin Plot Specific Options
           if(ptype == "ViolinPlot") tagList(
