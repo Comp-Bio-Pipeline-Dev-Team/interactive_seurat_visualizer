@@ -48,16 +48,25 @@ output$metadata_type_ui <- renderUI({
   
   div(class = "preview-box",
     h4("Metadata Column Types", style = "color: #2c3e50;"),
-    p("Specify the data type for each metadata column. Categorical columns use discrete colors, numerical columns use continuous gradients.", 
+    p("Select multiple rows for batch changes, or double-click cells to edit individually. Categorical columns use discrete colors, numerical columns use continuous gradients.", 
       style = "color: #7f8c8d; font-size: 14px;"),
     hr(),
     div(class = "metadata-table",
       DT::dataTableOutput("metadata_type_table"),
       br(),
-      actionButton("apply_metadata_types", "Apply Changes", 
-                   icon = icon("check"), 
-                   class = "btn-primary",
-                   style = "margin-top: 10px;")
+      div(style = "margin-top: 10px;",
+        actionButton("batch_categorical", "Set Selected → Categorical", 
+                     icon = icon("tag"), 
+                     class = "btn-warning btn-sm",
+                     style = "margin-right: 5px;"),
+        actionButton("batch_numerical", "Set Selected → Numerical", 
+                     icon = icon("hashtag"), 
+                     class = "btn-warning btn-sm",
+                     style = "margin-right: 10px;"),
+        actionButton("apply_metadata_types", "Apply All Changes", 
+                     icon = icon("check"), 
+                     class = "btn-primary")
+      )
     )
   )
 })
@@ -105,27 +114,110 @@ output$metadata_type_table <- DT::renderDataTable({
   
   DT::datatable(
     type_df,
-    selection = 'none',
+    selection = list(mode = 'multiple', target = 'row'),  # Enable multi-row selection
     editable = list(target = 'cell', disable = list(columns = c(0))),
     options = list(
       pageLength = 10,
-      dom = 't',
-      ordering = FALSE
+      lengthMenu = c(5, 10, 20, 50),
+      dom = 'lfrtip',  # Include length menu, filter, table, info, pagination
+      ordering = TRUE,
+      searching = TRUE
     ),
     rownames = FALSE
   )
+})
+
+# Reactive value to store pending type changes
+pending_type_changes <- reactiveVal(list())
+
+# Handle batch categorical
+observeEvent(input$batch_categorical, {
+  selected_rows <- input$metadata_type_table_rows_selected
+  
+  if (length(selected_rows) > 0) {
+    req(seurat_obj())
+    type_df <- infer_metadata_types(seurat_obj())
+    
+    # Store pending changes
+    changes <- pending_type_changes()
+    for (row in selected_rows) {
+      col_name <- type_df$Column[row]
+      changes[[col_name]] <- "Categorical"
+    }
+    pending_type_changes(changes)
+    
+    # Update table display
+    proxy <- DT::dataTableProxy("metadata_type_table")
+    for (row in selected_rows) {
+      DT::replaceData(proxy, 
+                      transform(type_df, Type = ifelse(seq_len(nrow(type_df)) %in% selected_rows, "Categorical", Type)),
+                      resetPaging = FALSE, rownames = FALSE)
+    }
+    
+    showNotification(paste("Marked", length(selected_rows), "columns as Categorical. Click 'Apply All Changes' to save."), 
+                    type = "message", duration = 3)
+  } else {
+    showNotification("Please select rows first", type = "warning", duration = 2)
+  }
+})
+
+# Handle batch numerical
+observeEvent(input$batch_numerical, {
+  selected_rows <- input$metadata_type_table_rows_selected
+  
+  if (length(selected_rows) > 0) {
+    req(seurat_obj())
+    type_df <- infer_metadata_types(seurat_obj())
+    
+    # Store pending changes
+    changes <- pending_type_changes()
+    for (row in selected_rows) {
+      col_name <- type_df$Column[row]
+      changes[[col_name]] <- "Numerical"
+    }
+    pending_type_changes(changes)
+    
+    # Update table display
+    proxy <- DT::dataTableProxy("metadata_type_table")
+    DT::replaceData(proxy, 
+                    transform(type_df, Type = ifelse(seq_len(nrow(type_df)) %in% selected_rows, "Numerical", Type)),
+                    resetPaging = FALSE, rownames = FALSE)
+    
+    showNotification(paste("Marked", length(selected_rows), "columns as Numerical. Click 'Apply All Changes' to save."), 
+                    type = "message", duration = 3)
+  } else {
+    showNotification("Please select rows first", type = "warning", duration = 2)
+  }
 })
 
 # Apply metadata type changes
 observeEvent(input$apply_metadata_types, {
   req(seurat_obj())
   
-  # Get edited table data
+  obj <- seurat_obj()
+  changes_made <- FALSE
+  
+  # Apply pending batch changes
+  pending <- pending_type_changes()
+  if (length(pending) > 0) {
+    for (col_name in names(pending)) {
+      new_type <- pending[[col_name]]
+      
+      if (new_type == "Categorical") {
+        obj@meta.data[[col_name]] <- as.factor(obj@meta.data[[col_name]])
+        changes_made <- TRUE
+      } else if (new_type == "Numerical") {
+        obj@meta.data[[col_name]] <- as.numeric(as.character(obj@meta.data[[col_name]]))
+        changes_made <- TRUE
+      }
+    }
+    pending_type_changes(list())  # Clear pending changes
+  }
+  
+  # Apply individual cell edits
   type_info <- input$metadata_type_table_cell_edit
   
   if (!is.null(type_info)) {
-    obj <- seurat_obj()
-    
     # Apply type conversions
     for (i in seq_len(nrow(type_info))) {
       row <- type_info$row[i]
@@ -135,12 +227,16 @@ observeEvent(input$apply_metadata_types, {
       if (new_type == "Categorical") {
         # Convert to factor
         obj@meta.data[[col_name]] <- as.factor(obj@meta.data[[col_name]])
+        changes_made <- TRUE
       } else if (new_type == "Numerical") {
         # Convert to numeric (if possible)
         obj@meta.data[[col_name]] <- as.numeric(as.character(obj@meta.data[[col_name]]))
+        changes_made <- TRUE
       }
     }
-    
+  }
+  
+  if (changes_made) {
     seurat_obj(obj)
     showNotification("Metadata types updated successfully!", type = "message", duration = 3)
   } else {

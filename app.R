@@ -40,44 +40,83 @@ source("ui_landing_page.R")
 plotControlUI <- function(id) {
   ns <- NS(id)
   tagList(
-    h4(paste("Settings for", id)), 
-    selectInput(ns("plot_type"), "Plot Type", 
-                choices = c("DimPlot", "FeaturePlot", "ViolinPlot", "DotPlot", "ClusterDistrBar")),
+    h4(paste("Settings for Plot", gsub("p", "", id))), 
     
-    uiOutput(ns("dynamic_ui")), 
-    
-    hr(),
-    h5("Appearance & Colors"),
-    fluidRow(
-      column(6, selectInput(ns("title_align"), "Title Align", choices = c("Left"=0, "Center"=0.5, "Right"=1), selected=0.5)),
-      column(6, uiOutput(ns("pt_size_ui")))
+    # Collapsible Section: Plot Type & Data
+    tags$div(class = "panel panel-default",
+      tags$div(class = "panel-heading", style = "cursor: pointer;", onclick = sprintf("$('#%s-section1').collapse('toggle')", id),
+        tags$h5(class = "panel-title",
+          tags$i(class = "glyphicon glyphicon-chevron-down", style = "margin-right: 5px;"),
+          "Plot Type & Data"
+        )
+      ),
+      tags$div(id = paste0(id, "-section1"), class = "panel-collapse collapse in",
+        tags$div(class = "panel-body",
+          selectInput(ns("plot_type"), "Plot Type", 
+                     choices = c("DimPlot", "FeaturePlot", "ViolinPlot", "DotPlot", "ClusterDistrBar")),
+          uiOutput(ns("dynamic_ui"))
+        )
+      )
     ),
     
-    # Orientation toggle for specific plot types
-    uiOutput(ns("orientation_ui")),
-    
-    selectInput(ns("color_source"), "Color Source", choices = c("Default", "Palette", "Manual")),
-    conditionalPanel(
-      condition = "input.color_source == 'Palette'", ns = ns,
-      selectInput(ns("palette_name"), "Palette", 
-                  choices = list(
-                    "Viridis" = c("viridis", "magma", "plasma", "inferno", "cividis"),
-                    "RColorBrewer" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Accent"),
-                    "MetBrewer" = names(MetBrewer::MetPalettes)
-                  ))
-    ),
-    conditionalPanel(
-      condition = "input.color_source == 'Manual'", ns = ns,
-      uiOutput(ns("manual_color_ui"))
-    ),
-    
-    hr(),
-    h5("Style & Advanced"),
-    uiOutput(ns("plot_style_ui")),  # Dynamic based on plot type
-    
-    textInput(ns("custom_title"), "Custom Title", ""),
-    numericInput(ns("title_size"), "Title Size", value = 16, min=8, max=30),
-    checkboxInput(ns("show_legend"), "Show Legend", value = TRUE)
+    # Collapsible Section: Appearance & Colors
+    tags$div(class = "panel panel-default",
+      tags$div(class = "panel-heading", style = "cursor: pointer;", onclick = sprintf("$('#%s-section2').collapse('toggle')", id),
+        tags$h5(class = "panel-title",
+          tags$i(class = "glyphicon glyphicon-chevron-right", style = "margin-right: 5px;"),
+          "Appearance & Colors"
+        )
+      ),
+      tags$div(id = paste0(id, "-section2"), class = "panel-collapse collapse",
+        tags$div(class = "panel-body",
+          fluidRow(
+            column(6, selectInput(ns("title_align"), "Title Align", choices = c("Left"=0, "Center"=0.5, "Right"=1), selected=0.5)),
+            column(6, uiOutput(ns("pt_size_ui")))
+          ),
+          
+          # Orientation toggle for specific plot types
+          uiOutput(ns("orientation_ui")),
+          
+          selectInput(ns("color_source"), "Color Source", choices = c("Default", "Palette", "Manual")),
+          conditionalPanel(
+            condition = sprintf("input['%s'] == 'Palette'", ns("color_source")),
+            selectInput(ns("palette_choice"), "Palette", 
+                       choices = list(
+                         "Viridis" = c("viridis", "magma", "plasma", "inferno", "cividis"),
+                         "RColorBrewer" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Accent"),
+                         "MetBrewer" = names(MetBrewer::MetPalettes)
+                       ))
+          ),
+          conditionalPanel(
+            condition = sprintf("input['%s'] == 'Manual'", ns("color_source")),
+            uiOutput(ns("manual_color_ui"))
+          ),
+          
+          selectInput(ns("plot_style"), "Plot Style", choices = c("Static (ggplot2)", "Interactive (plotly)")),
+          
+          textInput(ns("custom_title"), "Custom Title (optional)", value = ""),
+          fluidRow(
+            column(6, numericInput(ns("title_size"), "Title Size", value = 14, min = 8, max = 30)),
+            column(6, checkboxInput(ns("show_legend"), "Show Legend", value = TRUE))
+          ),
+          
+          # Legend & Axes Controls
+          hr(),
+          h5("Legend & Axes"),
+          conditionalPanel(
+            condition = sprintf("input['%s']", ns("show_legend")),
+            selectInput(ns("legend_position"), "Legend Position",
+                       choices = c("Right" = "right", "Left" = "left", 
+                                  "Top" = "top", "Bottom" = "bottom"),
+                       selected = "right")
+          ),
+          textInput(ns("xlab"), "X-axis Label (optional)", value = ""),
+          textInput(ns("ylab"), "Y-axis Label (optional)", value = ""),
+          sliderInput(ns("axis_text_size"), "Axis Text Size", 
+                     min = 8, max = 20, value = 12, step = 1)
+        )
+      )
+    )
   )
 }
 
@@ -94,8 +133,51 @@ main_app_navbar <- navbarPage(
   
   header = tagList(
     tags$head(tags$style(HTML("
-      .plot-container { border: 1px solid #ddd; padding: 10px; margin: 10px; background: white; border-radius: 4px; }
-      .active-plot { border: 3px solid #2c3e50 !important; box-shadow: 0 0 10px rgba(44,62,80,0.3); }
+      .plot-container {
+        border: 2px solid transparent;
+        transition: border-color 0.3s;
+      }
+      .plot-container.active-plot {
+        border-color: #3498db;
+        box-shadow: 0 0 10px rgba(52, 152, 219, 0.3);
+      }
+      
+      /* Independent sidebar scrolling */
+      .sidebar {
+        position: fixed;
+        top: 50px;
+        left: 0;
+        height: calc(100vh - 50px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        width: 25%;
+        background-color: #f5f5f5;
+        padding: 15px;
+        z-index: 100;
+      }
+      
+      .main-content {
+        margin-left: 25%;
+        padding: 15px;
+      }
+      
+      /* Smooth scrolling for sidebar */
+      .sidebar::-webkit-scrollbar {
+        width: 8px;
+      }
+      
+      .sidebar::-webkit-scrollbar-track {
+        background: #f1f1f1;
+      }
+      
+      .sidebar::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 4px;
+      }
+      
+      .sidebar::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
       .nav-tabs { font-weight: bold; }
     "))),
     # Add "Load New Data" button to navbar
@@ -116,6 +198,7 @@ main_app_navbar <- navbarPage(
   sidebarLayout(
     sidebarPanel(
       width = 3,
+      class = "sidebar",
       
       # JavaScript to highlight active plot and switch tabs
       tags$script(HTML("
@@ -147,6 +230,18 @@ main_app_navbar <- navbarPage(
             $('.plot-container').removeClass('active-plot');
             $(this).addClass('active-plot');
           }
+        });
+        
+        // Accordion chevron toggle
+        $(document).on('shown.bs.collapse', '.panel-collapse', function() {
+          $(this).prev('.panel-heading').find('.glyphicon')
+            .removeClass('glyphicon-chevron-right')
+            .addClass('glyphicon-chevron-down');
+        });
+        $(document).on('hidden.bs.collapse', '.panel-collapse', function() {
+          $(this).prev('.panel-heading').find('.glyphicon')
+            .removeClass('glyphicon-chevron-down')
+            .addClass('glyphicon-chevron-right');
         });
       ")),
       
@@ -189,6 +284,7 @@ main_app_navbar <- navbarPage(
     
     mainPanel(
       width = 9,
+      class = "main-content",
       textOutput("obj_info"),
       fluidRow(
         column(6, 
@@ -584,11 +680,18 @@ server <- function(input, output, session) {
   # --- DE Reactive Values & Logic ---
   de_results <- reactiveVal(NULL)
   
-  # Update DE metadata column choices
+  # Update DE metadata column choices (categorical only)
   observe({
     req(seurat_obj())
-    meta_cols <- names(seurat_obj()@meta.data)
-    updateSelectInput(session, "de_group_by", choices = meta_cols, selected = "seurat_clusters")
+    obj <- seurat_obj()
+    
+    # Get only categorical metadata columns
+    categorical_cols <- names(obj@meta.data)[
+      sapply(obj@meta.data, function(x) is.factor(x) || is.character(x))
+    ]
+    
+    updateSelectInput(session, "de_group_by", choices = categorical_cols, 
+                     selected = if("seurat_clusters" %in% categorical_cols) "seurat_clusters" else categorical_cols[1])
   })
   
   # Update Ident 1 and Ident 2 based on chosen metadata column
@@ -1362,6 +1465,10 @@ server <- function(input, output, session) {
       # ViolinPlot module
       params <- validate_violin_plot_params(input, ns, obj)
       if (!is.null(params)) {
+        # Use show_points checkbox to control point display
+        show_points <- input[[ns("show_points")]]
+        violin_pt_size <- if (!is.null(show_points) && show_points) pt_size else 0
+        
         p <- plot_violin(
           obj = obj,
           features = params$features,
@@ -1370,7 +1477,7 @@ server <- function(input, output, session) {
           assay = assay,
           layer = layer,
           colors = colors,
-          pt_size = pt_size,
+          pt_size = violin_pt_size,
           title = if(isTruthy(title)) title else NULL,
           show_legend = show_legend,
           flip = flip
@@ -1403,6 +1510,34 @@ server <- function(input, output, session) {
       }
     }
     
+    # Apply common customizations to all plots
+    if (!is.null(p)) {
+      # Apply legend position
+      legend_pos <- input[[ns("legend_position")]]
+      if (!is.null(legend_pos) && !is.null(input[[ns("show_legend")]]) && input[[ns("show_legend")]]) {
+        p <- p + ggplot2::theme(legend.position = legend_pos)
+      }
+      
+      # Apply axis customizations
+      xlab_custom <- input[[ns("xlab")]]
+      ylab_custom <- input[[ns("ylab")]]
+      axis_size <- input[[ns("axis_text_size")]]
+      
+      if (!is.null(xlab_custom) && nchar(xlab_custom) > 0) {
+        p <- p + ggplot2::labs(x = xlab_custom)
+      }
+      if (!is.null(ylab_custom) && nchar(ylab_custom) > 0) {
+        p <- p + ggplot2::labs(y = ylab_custom)
+      }
+      if (!is.null(axis_size)) {
+        p <- p + ggplot2::theme(
+          axis.text = ggplot2::element_text(size = axis_size),
+          axis.text.x = ggplot2::element_text(size = axis_size),
+          axis.text.y = ggplot2::element_text(size = axis_size)
+        )
+      }
+    }
+    
     # If p is still NULL, return a message
     if (is.null(p)) {
       return(ggplot() + annotate("text", x=0, y=0, 
@@ -1428,23 +1563,30 @@ server <- function(input, output, session) {
     output[[ns("dynamic_ui")]] <- renderUI({
       req(seurat_obj())
       ptype <- input[[ns("plot_type")]]
-      reds <- names(seurat_obj()@reductions)
-      metas <- c("Default", names(seurat_obj()@meta.data))
+      req(ptype)
+      
+      metas <- c("Default", colnames(seurat_obj()@meta.data))
+      reds <- names(seurat_obj()@reductions)  # Fixed: use @reductions not @assays
       assays <- names(seurat_obj()@assays)
+      
+      # Get only categorical metadata columns for group_by and split_by
+      categorical_metas <- c("Default", colnames(seurat_obj()@meta.data)[
+        sapply(seurat_obj()@meta.data, function(x) is.factor(x) || is.character(x))
+      ])
       
       # Get all features (genes + metadata for UCell)
       all_features <- c(rownames(seurat_obj()), colnames(seurat_obj()@meta.data))
       
       if (ptype == "ClusterDistrBar") {
         tagList(
-          selectInput(ns("cdb_group1"), "X Axis (Sample)", choices=metas[-1]),
-          selectInput(ns("cdb_group2"), "Fill (Cluster)", choices=metas[-1])
+          selectInput(ns("cdb_group1"), "X Axis (Sample)", choices=categorical_metas[-1]),
+          selectInput(ns("cdb_group2"), "Fill (Cluster)", choices=categorical_metas[-1])
         )
       } else {
         tagList(
           if(ptype %in% c("DimPlot","FeaturePlot")) selectInput(ns("reduction"), "Reduction", choices=reds),
-          if(ptype %in% c("DimPlot","ViolinPlot","DotPlot")) selectInput(ns("group_by"), "Group By", choices=metas),
-          selectInput(ns("split_by"), "Split By", choices=c("None", metas[-1])),
+          if(ptype %in% c("DimPlot","ViolinPlot","DotPlot")) selectInput(ns("group_by"), "Group By", choices=categorical_metas),
+          selectInput(ns("split_by"), "Split By", choices=c("None", categorical_metas[-1])),
           
           # Assay and Layer selection for plots that use expression data
           if(ptype %in% c("FeaturePlot","ViolinPlot","DotPlot")) tagList(
@@ -1474,10 +1616,18 @@ server <- function(input, output, session) {
             selectizeInput(ns("feature"), "Feature", choices=NULL, options=list(
               placeholder = 'Type to search genes or metadata...',
               onInitialize = I('function() { this.setValue(""); }')
-            ))
+            )),
+          
+          # Violin Plot Specific Options
+          if(ptype == "ViolinPlot") tagList(
+            hr(),
+            h5("Violin Plot Options"),
+            checkboxInput(ns("show_points"), "Show Individual Points", value = TRUE)
+          )
         )
       }
     })
+    
     
     # Update feature choices server-side for autocomplete
     observe({
@@ -1556,7 +1706,20 @@ server <- function(input, output, session) {
     obj <- seurat_obj()
     all_features <- c(rownames(obj), colnames(obj@meta.data))
     updateSelectizeInput(session, "hm_features", choices = all_features, server = TRUE)
-    updateSelectInput(session, "hm_group_by", choices = names(obj@meta.data), selected = "seurat_clusters")
+  })
+  
+  # Update heatmap metadata choices (categorical only)
+  observe({
+    req(seurat_obj())
+    obj <- seurat_obj()
+    
+    # Get only categorical metadata columns
+    categorical_cols <- names(obj@meta.data)[
+      sapply(obj@meta.data, function(x) is.factor(x) || is.character(x))
+    ]
+    
+    updateSelectInput(session, "hm_group_by", choices = categorical_cols, 
+                     selected = if("seurat_clusters" %in% categorical_cols) "seurat_clusters" else categorical_cols[1])
   })
   
   # Manual annotation color UI
