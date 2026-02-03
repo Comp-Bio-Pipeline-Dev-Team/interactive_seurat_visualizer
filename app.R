@@ -1502,11 +1502,9 @@ server <- function(input, output, session) {
         tagList(
           checkboxInput(ns("flip_coords"), "Flip to Horizontal", value=FALSE),
           if (ptype == "ClusterDistrBar") tagList(
-            checkboxInput(ns("show_counts"), "Show Cell Counts", value=FALSE),
-            conditionalPanel(
-              condition = "input.show_counts", ns = ns,
-              sliderInput(ns("count_size"), "Count Label Size", min=2, max=8, value=3, step=0.5)
-            )
+          )
+        )
+      }
     })
     
     # Plot style UI
