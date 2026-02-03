@@ -23,26 +23,22 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Install renv
+# Install renv for package management
 RUN R -e "install.packages('renv', repos='https://cloud.r-project.org')"
 
-# Copy renv.lock file
+# Copy renv configuration files first (for Docker layer caching)
 COPY renv.lock /app/
+COPY .Rprofile /app/
+COPY renv/activate.R /app/renv/
 
-# Initialize renv and restore packages from lockfile
-# This installs all 182 packages with exact versions specified in renv.lock
-RUN R -e "renv::restore(prompt = FALSE)"
+# Restore packages from renv.lock
+# This ensures exact package versions are installed
+RUN R -e "renv::restore()"
 
 # Copy application files
 COPY app.R /app/
 COPY color_utils.R /app/
 COPY plot_cluster_distribution.R /app/
-COPY plot_dimension_reduction.R /app/
-COPY plot_feature.R /app/
-COPY plot_violin.R /app/
-COPY plot_dot.R /app/
-COPY ui_landing_page.R /app/
-COPY server_landing_page.R /app/
 COPY setup.R /app/
 COPY generate_dummy_seurat.R /app/
 COPY README.md /app/

@@ -1,0 +1,66 @@
+# Temporary Dockerfile to generate renv.lock
+# This installs all packages and creates a snapshot
+
+FROM rocker/r-ver:4.4.0
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
+    libfontconfig1-dev \
+    libharfbuzz-dev \
+    libfribidi-dev \
+    libfreetype6-dev \
+    libpng-dev \
+    libtiff5-dev \
+    libjpeg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Install renv first
+RUN R -e "install.packages('renv', repos='https://cloud.r-project.org')"
+
+# Install all required CRAN packages
+RUN R -e "install.packages(c('shiny', 'shinythemes', 'ggplot2', 'patchwork', 'cowplot', 'plotly', 'colourpicker', 'MetBrewer', 'viridis', 'RColorBrewer', 'BiocManager', 'scales', 'DT'), repos='https://cloud.r-project.org')"
+
+# Install Seurat
+RUN R -e "install.packages('Seurat', repos='https://cloud.r-project.org')"
+
+# Install Bioconductor packages
+RUN R -e "BiocManager::install('UCell', update=FALSE)"
+
+# Copy application files (needed for renv::dependencies() to work)
+COPY app.R /app/
+COPY color_utils.R /app/
+COPY plot_cluster_distribution.R /app/
+COPY plot_dimension_reduction.R /app/
+COPY plot_feature.R /app/
+COPY plot_violin.R /app/
+COPY plot_dot.R /app/
+COPY ui_landing_page.R /app/
+COPY server_landing_page.R /app/
+COPY setup.R /app/
+COPY generate_dummy_seurat.R /app/
+
+# Initialize renv WITHOUT bare mode, then install packages into renv library
+RUN R -e "\
+    library(renv); \
+    renv::init(bare = FALSE, restart = FALSE); \
+    \
+    # Install all packages into renv library \
+    install.packages(c('shiny', 'shinythemes', 'ggplot2', 'patchwork', 'cowplot', 'plotly', 'colourpicker', 'MetBrewer', 'viridis', 'RColorBrewer', 'BiocManager', 'scales', 'DT')); \
+    install.packages('Seurat'); \
+    BiocManager::install('UCell', update=FALSE); \
+    \
+    # Create snapshot \
+    renv::snapshot(prompt = FALSE); \
+    \
+    # Print stats \
+    lock <- jsonlite::fromJSON('renv.lock'); \
+    cat('renv.lock generated with', length(lock$Packages), 'packages\n')"
+
+# Default command (not used, just for reference)
+CMD ["cat", "renv.lock"]
