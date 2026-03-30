@@ -1,6 +1,6 @@
 # Documentation
 
-This directory is the **single source of truth** for all project documentation. All planning artifacts, walkthroughs, setup guides, and session logs are kept here and version-controlled alongside the code.
+This directory is the **single source of truth** for all project documentation. All planning artifacts, walkthroughs, setup guides, and session prompts are kept here and version-controlled alongside the code.
 
 ---
 
@@ -16,19 +16,24 @@ docs/
 ├── DOCKER_INSTRUCTIONS.md             ← Docker deployment details and volume mounting
 ├── RENV_SETUP.md                      ← renv package management and lockfile workflow
 │
-├── # Feature Implementation Docs
-├── REFACTORING_PLAN.md                ← Plan: modular architecture refactoring
-├── REFACTORING_WALKTHROUGH.md         ← Walkthrough: modular refactoring results
-├── MODULARIZATION_PLAN_V2.md          ← Plan: V2 modularization
-├── MODULARIZATION_WALKTHROUGH_V2.md   ← Walkthrough: V2 modularization
-├── MODULARIZATION_WALKTHROUGH_FINAL.md← Walkthrough: Final modularization state
+├── # Feature Planning (active & completed)
+├── SIMPLIFICATION_PLAN_03292026.md    ← Plan: remove plotly/DE/ORA tabs (in progress)
 ├── LANDING_PAGE_IMPLEMENTATION_PLAN.md← Plan: landing page with metadata mgmt
 ├── LANDING_PAGE_STATUS.md             ← Status: landing page feature progress
+├── REFACTORING_PLAN.md                ← Plan: modular architecture refactoring
+├── MODULARIZATION_PLAN_V2.md          ← Plan: V2 modularization
+│
+├── # Walkthroughs (completed work)
+├── REFACTORING_WALKTHROUGH.md         ← Walkthrough: modular refactoring results
+├── MODULARIZATION_WALKTHROUGH_V2.md   ← Walkthrough: V2 modularization
+├── MODULARIZATION_WALKTHROUGH_FINAL.md← Walkthrough: Final modularization state
+│
+├── # Testing & Reference
 ├── TESTING_LANDING_PAGE.md            ← Testing guide: landing page features
 ├── PACKAGE_AUDIT.md                   ← R package dependency audit
 ├── RENV_LOCK_GENERATION.md            ← How renv.lock was generated via Docker
 │
-└── antigravity_prompting/             ← AI-assisted session logs
+└── antigravity_prompting/             ← Full AI session transcripts (auto-saved)
     ├── Refactoring_Seurat_App_antigravity_prompting_01302026.md
     └── Implementing_UI_Enhancements_antigravity_prompting_02032026.md
 ```
@@ -69,24 +74,31 @@ See [`RENV_SETUP.md`](RENV_SETUP.md) and [`DOCKER_COMMANDS.md`](DOCKER_COMMANDS.
 
 ## 🗂️ Documentation Convention
 
-> **All planning artifacts, implementation walkthroughs, and session notes go in `docs/`.**
+> **All planning artifacts, implementation walkthroughs, and session prompts go in `docs/`. Always commit them with (or before) the code changes they describe.**
 
-When making significant changes:
-1. Create or update a `*_PLAN.md` in `docs/` before starting
-2. Create or update a `*_WALKTHROUGH.md` in `docs/` after completing
-3. Session AI-prompting logs go in `docs/antigravity_prompting/`
-4. Commit docs changes **with** the code changes they describe
+| Doc type | Naming convention | When to create |
+|---|---|---|
+| Implementation plan | `*_PLAN_MMDDYYYY.md` | Before starting significant changes |
+| Walkthrough | `*_WALKTHROUGH_MMDDYYYY.md` | After completing changes |
+| AI session prompt | `docs/antigravity_prompting/Topic_antigravity_prompting_MMDDYYYY.md` | Auto-saved by Antigravity |
+
+Workflow:
+1. **Plan** → create `docs/*_PLAN_MMDDYYYY.md`, commit it
+2. **Execute** → make code changes
+3. **Document** → create `docs/*_WALKTHROUGH_MMDDYYYY.md`, commit with code
+4. **Update** → this `README.md` feature history table
 
 ---
 
 ## 📋 Feature History
 
-| Date | Feature | Plan | Walkthrough |
-|------|---------|------|-------------|
-| 2026-01-28 | Modular architecture refactoring | [REFACTORING_PLAN.md](REFACTORING_PLAN.md) | [REFACTORING_WALKTHROUGH.md](REFACTORING_WALKTHROUGH.md) |
-| 2026-01-29 | V2 modularization (plot modules) | [MODULARIZATION_PLAN_V2.md](MODULARIZATION_PLAN_V2.md) | [MODULARIZATION_WALKTHROUGH_FINAL.md](MODULARIZATION_WALKTHROUGH_FINAL.md) |
-| 2026-01-30 | Landing page & metadata management | [LANDING_PAGE_IMPLEMENTATION_PLAN.md](LANDING_PAGE_IMPLEMENTATION_PLAN.md) | [LANDING_PAGE_STATUS.md](LANDING_PAGE_STATUS.md) |
-| 2026-02-03 | UI enhancements (accordion, sidebar, legends, axes) | — | See session log |
+| Date | Feature | Status | Plan | Walkthrough |
+|------|---------|--------|------|-------------|
+| 2026-01-28 | Modular architecture refactoring | ✅ Done | [REFACTORING_PLAN.md](REFACTORING_PLAN.md) | [REFACTORING_WALKTHROUGH.md](REFACTORING_WALKTHROUGH.md) |
+| 2026-01-29 | V2 modularization (plot modules) | ✅ Done | [MODULARIZATION_PLAN_V2.md](MODULARIZATION_PLAN_V2.md) | [MODULARIZATION_WALKTHROUGH_FINAL.md](MODULARIZATION_WALKTHROUGH_FINAL.md) |
+| 2026-01-30 | Landing page & metadata management | ✅ Done | [LANDING_PAGE_IMPLEMENTATION_PLAN.md](LANDING_PAGE_IMPLEMENTATION_PLAN.md) | [LANDING_PAGE_STATUS.md](LANDING_PAGE_STATUS.md) |
+| 2026-02-03 | UI enhancements (accordion, sidebar, legends, axes) | ✅ Done | — | [antigravity_prompting/](antigravity_prompting/) |
+| 2026-03-29 | Simplification: remove plotly/DE/ORA | ⏳ In progress | [SIMPLIFICATION_PLAN_03292026.md](SIMPLIFICATION_PLAN_03292026.md) | — |
 
 ---
 
@@ -104,6 +116,6 @@ When making significant changes:
 | `ui_landing_page.R` | Landing page UI |
 | `server_landing_page.R` | Landing page server logic |
 | `setup.R` | App initialization helpers |
-| `enrichment_backend.R` | Gene enrichment analysis backend |
 | `renv.lock` | **Pinned R package versions (source of truth for Docker)** |
 | `Dockerfile` | Production Docker image (builds from renv.lock) |
+
