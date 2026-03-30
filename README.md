@@ -11,21 +11,27 @@ A comprehensive R Shiny application for interactive visualization and analysis o
 - **Color Palettes**: Viridis, RColorBrewer, MetBrewer, or manual color selection
 - **Interactive Controls**: Point size, orientation, split.by, group.by
 
-### Analysis
-- **Differential Expression**: 
-  - Group-vs-Group or One-vs-Rest comparisons
-  - Interactive results table with sorting/filtering
-  - Volcano plots with threshold lines
-  - CSV export
-- **UCell Signatures**: Calculate and visualize gene signature scores
-- **Data Subsetting**: Filter cells by metadata or gene expression
-
 ### File Support
 - Seurat objects (`.rds`)
-- H5AD files (`.h5ad`)
-- H5Seurat files (`.h5seurat`)
 
 ## Quick Start (Docker)
+
+### Option 1: download pre-built docker container (recommended)
+
+The app runs in Docker, with all R packages version controlled  via `renv.lock` for reproducibility.  In this option, there is no need to build the container.  User can used a pre-built container from dockerhub.
+
+```bash
+# 1. Download image from DockerHub
+sudo docker pull tbrunetti/interactive_seuart_visualizer:dev_03302026
+
+# 2. Run the container on the command line
+sudo docker run -d -p 3838:3838 tbrunetti/interactive_seuart_visualizer:dev_03302026
+
+# 3. Access the app by opening your favorite web browser and going to the following link
+http://localhost:3838 **or** http://0.0.0.0:3838
+```
+
+### Option 2: build docker container and run app
 
 The app runs in Docker, with all R packages pinned via `renv.lock` for reproducibility.
 
@@ -65,32 +71,7 @@ See [`docs/QUICKSTART.md`](docs/QUICKSTART.md) and [`docs/DOCKER_COMMANDS.md`](d
 - **Active plot** is highlighted with a bold border
 - **Preview plot** in Subsetting tab shows your full dataset
 
-### 3. Differential Expression Tab
-
-#### Run DE Analysis
-1. Select **Comparison Group** (metadata column)
-2. Choose **Ident 1** (group of interest)
-3. Choose **Ident 2** (comparison group or "All Others")
-4. Adjust thresholds (LogFC, Min Pct, Test Type)
-5. Click **Run Differential Expression**
-
-#### View Results
-- **Results Table**: Sortable, searchable table with all markers
-- **Volcano Plot**: Interactive visualization with threshold lines showing your cutoffs
-- **Download CSV**: Export results for further analysis
-
-### 4. Signatures Tab
-- Enter genes (one per line)
-- Name your signature
-- Click **Calculate UCell**
-- Signature scores appear in feature dropdowns as `[Name]_UCell`
-
-### 5. Subsetting Tab
-- **Filter by Metadata**: Select column and levels to keep
-- **Preview**: See your data before filtering
-- **Reset**: Restore original dataset
-
-### 6. Export Tab
+### 3. Export Tab
 - Choose target (single plot or all 4 plots)
 - Select format (PNG, PDF, JPG)
 - Set dimensions
