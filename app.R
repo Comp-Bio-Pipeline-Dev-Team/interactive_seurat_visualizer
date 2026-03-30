@@ -811,21 +811,21 @@ server <- function(input, output, session) {
             )),
           
           # Violin Plot Specific Options
-          # Individual points only available when Split By is None
-          if(ptype == "ViolinPlot") {
-            split_val <- input[[ns("split_by")]]
-            tagList(
-              hr(),
-              h5("Violin Plot Options"),
-              if(is.null(split_val) || split_val == "None")
-                checkboxInput(ns("show_points"), "Show Individual Points", value = TRUE)
-              else
-                tags$p(style = "color: #888; font-size: 0.85em; font-style: italic; margin-top: 5px;",
-                  tags$i(class = "glyphicon glyphicon-info-sign", style = "margin-right: 4px;"),
-                  "Individual points unavailable when Split By is active."
-                )
+          # Use conditionalPanel (client-side JS) so split_by changes don't
+          # re-render this entire renderUI block (which would destroy feature input)
+          if(ptype == "ViolinPlot") tagList(
+            hr(),
+            h5("Violin Plot Options"),
+            checkboxInput(ns("show_points"), "Show Individual Points", value = TRUE),
+            conditionalPanel(
+              condition = sprintf("input['%s'] != 'None' && input['%s'] != null && input['%s'] != ''",
+                                 ns("split_by"), ns("split_by"), ns("split_by")),
+              tags$p(style = "color: #888; font-size: 0.85em; font-style: italic; margin-top: 2px;",
+                tags$i(class = "glyphicon glyphicon-info-sign", style = "margin-right: 4px;"),
+                "Points hidden when Split By is active."
+              )
             )
-          }
+          )
         )
       }
     })
