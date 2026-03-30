@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     libtiff5-dev \
     pandoc \
     cmake \
+    libglpk-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -29,8 +30,12 @@ RUN R -e "install.packages('renv', repos='https://cloud.r-project.org')"
 # Copy renv.lock file
 COPY renv.lock /app/
 
-# Initialize renv and restore packages from lockfile
-# This installs all 182 packages with exact versions specified in renv.lock
+# Override Posit Package Manager (p3m.dev) with standard CRAN mirror.
+# The renv.lock was created with p3m.dev URLs which produce malformed paths
+# in some renv versions during Docker builds. cloud.r-project.org is stable.
+ENV RENV_CONFIG_REPOS_OVERRIDE="https://cloud.r-project.org"
+
+# Restore packages from lockfile using the CRAN mirror override
 RUN R -e "renv::restore(prompt = FALSE)"
 
 # Copy application files
