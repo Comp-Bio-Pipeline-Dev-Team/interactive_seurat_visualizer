@@ -21,42 +21,26 @@ A comprehensive R Shiny application for interactive visualization and analysis o
 - **Data Subsetting**: Filter cells by metadata or gene expression
 
 ### File Support
-- Seurat objects (`.rds`) up to 10GB
-- H5AD files (`.h5ad`) with automatic conversion
+- Seurat objects (`.rds`)
+- H5AD files (`.h5ad`)
 - H5Seurat files (`.h5seurat`)
 
-## Quick Start
+## Quick Start (Docker)
 
-### Option 1: Local R Installation
+The app runs in Docker, with all R packages pinned via `renv.lock` for reproducibility.
 
-1. **Install Dependencies**:
-```r
-source("setup.R")
-```
-
-2. **Launch the App**:
-```r
-library(shiny)
-runApp(".")
-```
-
-3. **Access**: The app will open automatically in your default browser at `http://127.0.0.1:XXXX`
-
-### Option 2: Docker (Recommended for Deployment)
-
-1. **Build and Run**:
 ```bash
-docker-compose up -d
+# 1. Build the image (restores all packages from renv.lock)
+sudo docker build -t seurat-shiny-app .
+
+# 2. Run the container
+sudo docker run -d -p 3838:3838 --name seurat-app seurat-shiny-app
+
+# 3. Access the app
+open http://localhost:3838
 ```
 
-2. **Access**: Open `http://localhost:3838` in your browser
-
-3. **Stop**:
-```bash
-docker-compose down
-```
-
-See [DOCKER_INSTRUCTIONS.md](DOCKER_INSTRUCTIONS.md) for detailed Docker deployment instructions.
+See [`docs/QUICKSTART.md`](docs/QUICKSTART.md) and [`docs/DOCKER_COMMANDS.md`](docs/DOCKER_COMMANDS.md) for full details.
 
 ## Usage Guide
 
@@ -114,16 +98,8 @@ See [DOCKER_INSTRUCTIONS.md](DOCKER_INSTRUCTIONS.md) for detailed Docker deploym
 
 ## Prerequisites
 
-### For Local Installation
-- R >= 4.0.0
-- Required packages (installed via `setup.R`):
-  - Core: `shiny`, `Seurat`, `ggplot2`, `patchwork`
-  - Visualization: `SCpubr`, `MetBrewer`, `viridis`, `RColorBrewer`
-  - Analysis: `UCell`, `DT`, `ggrepel`
-  - Utilities: `colourpicker`, `cowplot`, `plotly`
-
-### For Docker
-- Docker and Docker Compose
+- Docker (install from [docker.com](https://docker.com))
+- All R packages are managed via `renv.lock` — no local R installation required
 
 ## Tips & Tricks
 
@@ -146,14 +122,25 @@ See [DOCKER_INSTRUCTIONS.md](DOCKER_INSTRUCTIONS.md) for detailed Docker deploym
 ## Project Structure
 
 ```
-seurat_shiny_app/
-├── app.R                    # Main application
-├── setup.R                  # Dependency installer
-├── Dockerfile               # Docker image definition
-├── docker-compose.yml       # Docker orchestration
-├── DOCKER_INSTRUCTIONS.md   # Docker deployment guide
-└── README.md               # This file
+interactive_seurat_visualizer/
+├── app.R                         # Main Shiny application
+├── color_utils.R                 # Unified color palette system
+├── plot_dimension_reduction.R    # DimPlot module
+├── plot_feature.R                # FeaturePlot module
+├── plot_violin.R                 # ViolinPlot module
+├── plot_dot.R                    # DotPlot module
+├── plot_cluster_distribution.R   # ClusterDistrBar module
+├── ui_landing_page.R             # Landing page UI
+├── server_landing_page.R         # Landing page server logic
+├── enrichment_backend.R          # Gene enrichment analysis
+├── setup.R                       # App initialization helpers
+├── renv.lock                     # R package versions (source of truth for Docker)
+├── Dockerfile                    # Docker image (builds from renv.lock)
+├── docker-compose.yml            # Docker orchestration
+└── docs/                         # All documentation (see docs/README.md)
 ```
+
+See [`docs/README.md`](docs/README.md) for the full documentation index.
 
 ## Citation
 
