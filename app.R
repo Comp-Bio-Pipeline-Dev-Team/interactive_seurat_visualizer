@@ -738,8 +738,11 @@ server <- function(input, output, session) {
       params <- validate_violin_plot_params(input, ns, obj)
       if (!is.null(params)) {
         # Use show_points checkbox to control point display
+        # Individual points not supported when split_by is active
         show_points <- input[[ns("show_points")]]
-        violin_pt_size <- if (!is.null(show_points) && show_points) pt_size else 0
+        split_val <- input[[ns("split_by")]]
+        has_split <- !is.null(split_val) && split_val != "None"
+        violin_pt_size <- if (!has_split && !is.null(show_points) && show_points) pt_size else 0
         
         p <- plot_violin(
           obj = obj,
@@ -808,6 +811,18 @@ server <- function(input, output, session) {
           axis.text.y = ggplot2::element_text(size = axis_size)
         )
       }
+      
+      # Hide axis tick values for DimPlot/FeaturePlot if requested
+      # (keeps axis title labels, removes numeric coordinate values)
+      if (ptype %in% c("DimPlot", "FeaturePlot")) {
+        show_ticks <- input[[ns("show_axis_ticks")]]
+        if (!is.null(show_ticks) && !show_ticks) {
+          p <- p + ggplot2::theme(
+            axis.text  = ggplot2::element_blank(),
+            axis.ticks = ggplot2::element_blank()
+          )
+        }
+      }
     }
     
     # If p is still NULL, return a message
@@ -857,6 +872,7 @@ server <- function(input, output, session) {
       } else {
         tagList(
           if(ptype %in% c("DimPlot","FeaturePlot")) selectInput(ns("reduction"), "Reduction", choices=reds),
+          if(ptype %in% c("DimPlot","FeaturePlot")) checkboxInput(ns("show_axis_ticks"), "Show Axis Tick Values", value = FALSE),
           if(ptype %in% c("DimPlot","ViolinPlot","DotPlot")) selectInput(ns("group_by"), "Group By", choices=categorical_metas),
           selectInput(ns("split_by"), "Split By", choices=c("None", categorical_metas[-1])),
           
@@ -891,11 +907,21 @@ server <- function(input, output, session) {
             )),
           
           # Violin Plot Specific Options
-          if(ptype == "ViolinPlot") tagList(
-            hr(),
-            h5("Violin Plot Options"),
-            checkboxInput(ns("show_points"), "Show Individual Points", value = TRUE)
-          )
+          # Individual points only available when Split By is None
+          if(ptype == "ViolinPlot") {
+            split_val <- input[[ns("split_by")]]
+            tagList(
+              hr(),
+              h5("Violin Plot Options"),
+              if(is.null(split_val) || split_val == "None")
+                checkboxInput(ns("show_points"), "Show Individual Points", value = TRUE)
+              else
+                tags$p(style = "color: #888; font-size: 0.85em; font-style: italic; margin-top: 5px;",
+                  tags$i(class = "glyphicon glyphicon-info-sign", style = "margin-right: 4px;"),
+                  "Individual points unavailable when Split By is active."
+                )
+            )
+          }
         )
       }
     })
