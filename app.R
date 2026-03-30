@@ -235,25 +235,6 @@ main_app_navbar <- navbarPage(
       
       tabsetPanel(id = "settings_tabs",
         
-        tabPanel("Subsetting",
-          br(),
-          h5("Preview (All Cells)"),
-          plotOutput("preview_plot", height="250px"),
-          hr(),
-          selectInput("subset_col", "Meta Col", choices = NULL),
-          selectizeInput("subset_levels", "Keep Levels", choices = NULL, multiple=TRUE),
-          actionButton("apply_subset_meta", "Filter", class="btn-warning btn-sm"),
-          hr(),
-          actionButton("reset_data", "Reset", class="btn-danger")
-        ),
-        
-        tabPanel("Signatures",
-           br(),
-           textAreaInput("sig_genes", "Genes (one per line)", rows=5, placeholder="CD3D\nCD3E\nCD8A"),
-           textInput("sig_name", "Signature Name", "MySig"),
-           actionButton("calc_ucell", "Calculate UCell", class="btn-success")
-        ),
-        
         tabPanel("Plot 1", plotControlUI("p1")),
         tabPanel("Plot 2", plotControlUI("p2")),
         tabPanel("Plot 3", plotControlUI("p3")),
@@ -540,89 +521,8 @@ server <- function(input, output, session) {
     paste(ncol(seurat_obj()), "cells,", nrow(seurat_obj()), "features")
   })
   
-  # Preview plot in subsetting tab
-  output$preview_plot <- renderPlot({
-    req(seurat_obj())
-    tryCatch({
-      red <- names(seurat_obj()@reductions)[1]
-      if (!is.null(red)) {
-        DimPlot(seurat_obj(), reduction=red, pt.size=0.5) + 
-          theme(legend.position="right", legend.text=element_text(size=8))
-      } else {
-        ggplot() + annotate("text", x=0, y=0, label="No reductions available") + theme_void()
-      }
-    }, error=function(e) ggplot() + theme_void())
-  })
   
-  # --- Subsetting ---
-  observe({ 
-    req(seurat_obj())
-    updateSelectInput(session, "subset_col", choices=names(seurat_obj()@meta.data))
-  })
-  
-  observeEvent(input$subset_col, { 
-    req(seurat_obj())
-    vals <- sort(unique(seurat_obj()@meta.data[[input$subset_col]]))
-    updateSelectizeInput(session, "subset_levels", choices=vals)
-  })
-  
-  observeEvent(input$apply_subset_meta, {
-    req(seurat_obj(), input$subset_levels)
-    cells <- rownames(seurat_obj()@meta.data[seurat_obj()@meta.data[[input$subset_col]] %in% input$subset_levels, ])
-    seurat_obj(subset(seurat_obj(), cells=cells))
-    showNotification(paste("Filtered to", length(cells), "cells"), type="message")
-  })
-  
-  observeEvent(input$reset_data, { 
-    seurat_obj(original_obj())
-    showNotification("Reset to original", type="message")
-  })
-  
-  # --- UCell ---
-  observeEvent(input$calc_ucell, {
-    req(seurat_obj(), input$sig_genes, input$sig_name)
-    if(!has_ucell) { 
-      showNotification("UCell not installed", type="error")
-      return()
-    }
-    
-    genes <- trimws(unlist(strsplit(input$sig_genes, "\n")))
-    genes <- genes[genes != ""]
-    
-    if(length(genes) == 0) {
-      showNotification("No genes provided", type="warning")
-      return()
-    }
-    
-    sig_list <- list()
-    sig_list[[input$sig_name]] <- genes
-    
-    tryCatch({
-      # Use isolate to prevent triggering plot updates
-      obj <- isolate(seurat_obj())
-      obj <- AddModuleScore_UCell(obj, features=sig_list, name=NULL)
-      
-      # Find the actual column name
-      sig_col <- grep(input$sig_name, colnames(obj@meta.data), value=TRUE)[1]
-      
-      # Update object without triggering plots
-      isolate({
-        seurat_obj(obj)
-        
-        # Force update of all feature dropdowns
-        all_features <- c(rownames(obj), colnames(obj@meta.data))
-        lapply(c("p1","p2","p3","p4"), function(id) {
-          updateSelectizeInput(session, paste0(id, "-feature"), choices=all_features)
-        })
-      })
-      
-      showNotification(paste("UCell score added:", sig_col, "\nYou can now plot it in FeaturePlot or ViolinPlot"), type="message", duration=8)
-      
-    }, error=function(e) {
-      showNotification(paste("UCell error:", e$message), type="error")
-    })
-  })
-  
+
   # --- Color Helper (Refactored to use color_utils.R) ---
   get_colors <- function(id, obj, group_var, for_scpubr = FALSE) {
     ns <- function(x) paste0(id, "-", x)
@@ -739,10 +639,14 @@ server <- function(input, output, session) {
       if (!is.null(params)) {
         # Use show_points checkbox to control point display
         # Individual points not supported when split_by is active
-        show_points <- input[[ns("show_points")]]
+        # Use isolate to read show_points without creating an extra reactive dependency
+        # that fires when the checkbox UI re-renders on split_by change
+        show_points <- isolate(input[[ns("show_points")]])
         split_val <- input[[ns("split_by")]]
         has_split <- !is.null(split_val) && split_val != "None"
-        violin_pt_size <- if (!has_split && !is.null(show_points) && show_points) pt_size else 0
+        # Default show_points to TRUE if NULL (e.g. right after UI re-renders)
+        if (is.null(show_points)) show_points <- TRUE
+        violin_pt_size <- if (!has_split && isTRUE(show_points)) pt_size else 0
         
         p <- plot_violin(
           obj = obj,
