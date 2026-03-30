@@ -521,7 +521,6 @@ server <- function(input, output, session) {
     paste(ncol(seurat_obj()), "cells,", nrow(seurat_obj()), "features")
   })
   
-  
 
   # --- Color Helper (Refactored to use color_utils.R) ---
   get_colors <- function(id, obj, group_var, for_scpubr = FALSE) {
@@ -638,15 +637,8 @@ server <- function(input, output, session) {
       params <- validate_violin_plot_params(input, ns, obj)
       if (!is.null(params)) {
         # Use show_points checkbox to control point display
-        # Individual points not supported when split_by is active
-        # Use isolate to read show_points without creating an extra reactive dependency
-        # that fires when the checkbox UI re-renders on split_by change
-        show_points <- isolate(input[[ns("show_points")]])
-        split_val <- input[[ns("split_by")]]
-        has_split <- !is.null(split_val) && split_val != "None"
-        # Default show_points to TRUE if NULL (e.g. right after UI re-renders)
-        if (is.null(show_points)) show_points <- TRUE
-        violin_pt_size <- if (!has_split && isTRUE(show_points)) pt_size else 0
+        show_points <- input[[ns("show_points")]]
+        violin_pt_size <- if (!is.null(show_points) && show_points) pt_size else 0
         
         p <- plot_violin(
           obj = obj,
@@ -715,18 +707,6 @@ server <- function(input, output, session) {
           axis.text.y = ggplot2::element_text(size = axis_size)
         )
       }
-      
-      # Hide axis tick values for DimPlot/FeaturePlot if requested
-      # (keeps axis title labels, removes numeric coordinate values)
-      if (ptype %in% c("DimPlot", "FeaturePlot")) {
-        show_ticks <- input[[ns("show_axis_ticks")]]
-        if (!is.null(show_ticks) && !show_ticks) {
-          p <- p + ggplot2::theme(
-            axis.text  = ggplot2::element_blank(),
-            axis.ticks = ggplot2::element_blank()
-          )
-        }
-      }
     }
     
     # If p is still NULL, return a message
@@ -776,7 +756,6 @@ server <- function(input, output, session) {
       } else {
         tagList(
           if(ptype %in% c("DimPlot","FeaturePlot")) selectInput(ns("reduction"), "Reduction", choices=reds),
-          if(ptype %in% c("DimPlot","FeaturePlot")) checkboxInput(ns("show_axis_ticks"), "Show Axis Tick Values", value = FALSE),
           if(ptype %in% c("DimPlot","ViolinPlot","DotPlot")) selectInput(ns("group_by"), "Group By", choices=categorical_metas),
           selectInput(ns("split_by"), "Split By", choices=c("None", categorical_metas[-1])),
           
@@ -811,20 +790,10 @@ server <- function(input, output, session) {
             )),
           
           # Violin Plot Specific Options
-          # Use conditionalPanel (client-side JS) so split_by changes don't
-          # re-render this entire renderUI block (which would destroy feature input)
           if(ptype == "ViolinPlot") tagList(
             hr(),
             h5("Violin Plot Options"),
-            checkboxInput(ns("show_points"), "Show Individual Points", value = TRUE),
-            conditionalPanel(
-              condition = sprintf("input['%s'] != 'None' && input['%s'] != null && input['%s'] != ''",
-                                 ns("split_by"), ns("split_by"), ns("split_by")),
-              tags$p(style = "color: #888; font-size: 0.85em; font-style: italic; margin-top: 2px;",
-                tags$i(class = "glyphicon glyphicon-info-sign", style = "margin-right: 4px;"),
-                "Points hidden when Split By is active."
-              )
-            )
+            checkboxInput(ns("show_points"), "Show Individual Points", value = TRUE)
           )
         )
       }
