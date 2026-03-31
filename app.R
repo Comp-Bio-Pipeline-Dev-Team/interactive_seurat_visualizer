@@ -11,6 +11,12 @@ library(viridis)
 library(RColorBrewer)
 library(DT)
 
+# Pre-compute MetBrewer categories dynamically
+met_cb <- MetBrewer::colorblind_palettes
+met_types <- sapply(MetBrewer::MetPalettes, function(x) attr(x, "type"))
+met_cont <- names(met_types)[met_types == "continuous"]
+met_disc <- names(met_types)[met_types == "discrete"]
+
 # Optional Libraries
 has_ucell <- requireNamespace("UCell", quietly = TRUE)
 if (has_ucell) library(UCell)
@@ -72,9 +78,10 @@ plotControlUI <- function(id) {
             condition = sprintf("input['%s'] == 'Palette'", ns("color_source")),
             selectInput(ns("palette_name"), "Palette", 
                        choices = list(
-                         "Continuous" = c("viridis", "plasma", "magma", "inferno", "cividis", "Blues", "Reds", "Greens"),
+                         "Continuous" = c("viridis", "plasma", "magma", "inferno", "cividis", "Blues", "Reds", "Greens", met_cont),
                          "Diverging" = c("RdBu", "RdYlBu", "RdYlGn", "Spectral"),
-                         "Discrete" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Pastel2", "Accent")
+                         "Discrete" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Pastel2", "Accent", met_disc),
+                         "Colorblind Friendly" = met_cb
                        ))
           ),
           conditionalPanel(
@@ -306,9 +313,9 @@ main_app_navbar <- navbarPage(
           condition = "input.hm_anno_color_source == 'Palette'",
           selectInput("hm_anno_palette", "Annotation Palette", 
                       choices = list(
-                        "Viridis" = c("viridis", "magma", "plasma", "inferno", "cividis"),
-                        "RColorBrewer" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Accent"),
-                        "MetBrewer" = names(MetBrewer::MetPalettes)
+                        "Continuous" = c("viridis", "magma", "plasma", "inferno", "cividis", met_cont),
+                        "Discrete" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Accent", met_disc),
+                        "Colorblind Friendly" = met_cb
                       ))
         ),
         conditionalPanel(
