@@ -37,9 +37,7 @@ get_palette_colors <- function(palette_name, n_colors, named = FALSE, level_name
     colors <- MetBrewer::met.brewer(palette_name, n_colors)
   }
   # RColorBrewer palettes
-  else if (palette_name %in% c("Set1", "Set2", "Set3", "Dark2", "Paired", 
-                               "Pastel1", "Pastel2", "Accent", "Spectral",
-                               "RdYlBu", "RdYlGn", "Blues", "Greens", "Reds")) {
+  else if (palette_name %in% rownames(RColorBrewer::brewer.pal.info)) {
     max_n <- RColorBrewer::brewer.pal.info[palette_name, "maxcolors"]
     if (n_colors <= max_n) {
       colors <- RColorBrewer::brewer.pal(n_colors, palette_name)
@@ -106,23 +104,36 @@ get_all_palette_names <- function() {
 get_manual_colors_from_inputs <- function(input, ns, levels, named = FALSE) {
   if (length(levels) == 0) return(NULL)
   
-  colors <- sapply(levels, function(level) {
-    # Build the input ID using the namespace function
-    color_input_id <- ns(paste0("col_", level))
-    color_value <- input[[color_input_id]]
-    
-    # Debug: print what we're looking for
-    cat("Looking for input:", color_input_id, "Value:", color_value, "\n")
-    
-    # Return the color if available, otherwise default to gray
-    if (is.null(color_value) || color_value == "") "gray" else color_value
+  # Take dependency on all Apply buttons
+  # We use sapply but we just evaluate them to register the reactive dependency
+  # When any apply button is clicked, this block invalidates and redraws the plot
+  sapply(levels, function(level) {
+    apply_btn <- input[[ns(paste0("apply_color_", make.names(level)))]]
   })
   
-  # Add names if requested
+  # Both HTML5 Color Picker and Text Field are provided side-by-side
+  # We prioritize the Text Field if user explicitly typed a color, else use the color picker value
+  colors <- sapply(levels, function(level) {
+    safe_l <- make.names(level)
+    text_id <- ns(paste0("col_text_", safe_l))
+    picker_id <- ns(paste0("col_picker_", safe_l))
+    
+    # Isolate inputs so dragging the color wheel doesn't freeze the app by triggering 100 redraws
+    col_text <- isolate(input[[text_id]])
+    col_picker <- isolate(input[[picker_id]])
+    
+    if (!is.null(col_text) && trimws(col_text) != "") {
+      trimws(col_text)
+    } else if (!is.null(col_picker)) {
+      col_picker
+    } else {
+      "gray"
+    }
+  })
+
   if (named) {
     names(colors) <- levels
   } else {
-    # Remove names if not requested
     colors <- unname(colors)
   }
   

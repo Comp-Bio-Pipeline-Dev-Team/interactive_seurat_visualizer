@@ -5,7 +5,7 @@ library(patchwork)
 library(shinythemes)
 library(colourpicker)
 library(cowplot)
-library(plotly)
+
 library(MetBrewer)
 library(viridis)
 library(RColorBrewer)
@@ -13,17 +13,7 @@ library(DT)
 
 # Optional Libraries
 has_ucell <- requireNamespace("UCell", quietly = TRUE)
-has_enrichment <- requireNamespace("clusterProfiler", quietly = TRUE) && 
-                  requireNamespace("enrichplot", quietly = TRUE)
 if (has_ucell) library(UCell)
-if (has_enrichment) {
-  library(clusterProfiler)
-  library(enrichplot)
-  library(fgsea)
-  library(msigdbr)
-  library(DOSE)
-  library(igraph)
-}
 
 options(shiny.maxRequestSize = 10000 * 1024^2)
 
@@ -80,19 +70,17 @@ plotControlUI <- function(id) {
           selectInput(ns("color_source"), "Color Source", choices = c("Default", "Palette", "Manual")),
           conditionalPanel(
             condition = sprintf("input['%s'] == 'Palette'", ns("color_source")),
-            selectInput(ns("palette_choice"), "Palette", 
+            selectInput(ns("palette_name"), "Palette", 
                        choices = list(
-                         "Viridis" = c("viridis", "magma", "plasma", "inferno", "cividis"),
-                         "RColorBrewer" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Accent"),
-                         "MetBrewer" = names(MetBrewer::MetPalettes)
+                         "Continuous" = c("viridis", "plasma", "magma", "inferno", "cividis", "Blues", "Reds", "Greens"),
+                         "Diverging" = c("RdBu", "RdYlBu", "RdYlGn", "Spectral"),
+                         "Discrete" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Pastel2", "Accent")
                        ))
           ),
           conditionalPanel(
             condition = sprintf("input['%s'] == 'Manual'", ns("color_source")),
             uiOutput(ns("manual_color_ui"))
           ),
-          
-          selectInput(ns("plot_style"), "Plot Style", choices = c("Static (ggplot2)", "Interactive (plotly)")),
           
           textInput(ns("custom_title"), "Custom Title (optional)", value = ""),
           fluidRow(
@@ -122,6 +110,7 @@ plotControlUI <- function(id) {
 
 
 ui <- fluidPage(
+  div(style = "display: none;", colourpicker::colourInput("dummy_color_picker", "Dummy")),
   uiOutput("main_ui")
 )
 
@@ -142,7 +131,7 @@ main_app_navbar <- navbarPage(
         box-shadow: 0 0 10px rgba(52, 152, 219, 0.3);
       }
       
-      /* Independent sidebar scrolling */
+      /* Sidebar properties */
       .sidebar {
         position: fixed;
         top: 50px;
@@ -154,6 +143,11 @@ main_app_navbar <- navbarPage(
         background-color: #f5f5f5;
         padding: 15px;
         z-index: 100;
+      }
+      
+      /* Ensure colourpicker popups stay above the sidebar! */
+      .minicolors-panel {
+        z-index: 1050 !important; 
       }
       
       .main-content {
@@ -247,25 +241,6 @@ main_app_navbar <- navbarPage(
       
       tabsetPanel(id = "settings_tabs",
         
-        tabPanel("Subsetting",
-          br(),
-          h5("Preview (All Cells)"),
-          plotOutput("preview_plot", height="250px"),
-          hr(),
-          selectInput("subset_col", "Meta Col", choices = NULL),
-          selectizeInput("subset_levels", "Keep Levels", choices = NULL, multiple=TRUE),
-          actionButton("apply_subset_meta", "Filter", class="btn-warning btn-sm"),
-          hr(),
-          actionButton("reset_data", "Reset", class="btn-danger")
-        ),
-        
-        tabPanel("Signatures",
-           br(),
-           textAreaInput("sig_genes", "Genes (one per line)", rows=5, placeholder="CD3D\nCD3E\nCD8A"),
-           textInput("sig_name", "Signature Name", "MySig"),
-           actionButton("calc_ucell", "Calculate UCell", class="btn-success")
-        ),
-        
         tabPanel("Plot 1", plotControlUI("p1")),
         tabPanel("Plot 2", plotControlUI("p2")),
         tabPanel("Plot 3", plotControlUI("p3")),
@@ -309,140 +284,7 @@ main_app_navbar <- navbarPage(
     )
   )),
   
-  tabPanel("Differential Expression",
-    sidebarLayout(
-      sidebarPanel(
-        width = 3,
-        h4("DE Parameters"),
-        selectInput("de_group_by", "Comparison Group", choices = NULL),
-        fluidRow(
-          column(6, selectInput("de_ident_1", "Ident 1", choices = NULL)),
-          column(6, selectInput("de_ident_2", "Ident 2", choices = NULL))
-        ),
-        p(tags$small("Select 'All Others' in Ident 2 for one-vs-rest comparison.")),
-        hr(),
-        numericInput("de_logfc", "LogFC Threshold", value = 0.25, min = 0, max = 5, step = 0.05),
-        numericInput("de_minpct", "Min Pct", value = 0.1, min = 0, max = 1, step = 0.05),
-        numericInput("de_pval", "P-value Threshold", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
-        selectInput("de_test", "Test Type", choices = c("wilcox", "t-test", "roc", "LR"), selected = "wilcox"),
-        br(),
-        actionButton("run_de", "Run Differential Expression", class="btn-primary btn-block"),
-        hr(),
-        h5("Volcano Plot Settings"),
-        sliderInput("volcano_pt_size", "Point Size", min = 0.5, max = 5, value = 2, step = 0.5),
-        sliderInput("volcano_alpha", "Point Transparency", min = 0.1, max = 1, value = 0.6, step = 0.1),
-        colourInput("volcano_sig_color", "Significant Color", value = "#E74C3C"),
-        colourInput("volcano_nonsig_color", "Non-significant Color", value = "#95A5A6"),
-        hr(),
-        h5("Export"),
-        selectInput("volcano_format", "Format", choices = c("png", "pdf", "jpg"), selected = "png"),
-        numericInput("volcano_width", "Width (inches)", value = 10, min = 4, max = 20),
-        numericInput("volcano_height", "Height (inches)", value = 8, min = 4, max = 20),
-        downloadButton("download_volcano", "Download Volcano Plot", class="btn-info btn-block"),
-        hr(),
-        downloadButton("download_de", "Download CSV", class="btn-success btn-block")
-      ),
-      mainPanel(
-        width = 9,
-        tabsetPanel(
-          tabPanel("Results Table", 
-            br(),
-            DT::DTOutput("de_table")
-          ),
-          tabPanel("Volcano Plot", 
-            br(),
-            plotlyOutput("de_volcano", height = "600px")
-          )
-        )
-      )
-    )
-  ),
   
-  tabPanel("Pathway Enrichment",
-    sidebarLayout(
-      sidebarPanel(
-        width = 3,
-        h4("Enrichment Analysis"),
-        
-        radioButtons("enrich_source", "Input Source",
-                     choices = c("From DE Results" = "de", "Custom Gene List" = "custom"),
-                     selected = "de"),
-        
-        conditionalPanel(
-          condition = "input.enrich_source == 'custom'",
-          textAreaInput("enrich_genes", "Gene List (one per line)", 
-                       rows = 5, placeholder = "CD3D\nCD4\nCD8A\n...")
-        ),
-        
-        hr(),
-        h5("Analysis Settings"),
-        
-        selectInput("enrich_type", "Analysis Type",
-                   choices = c("Over-Representation (ORA)" = "ora", 
-                              "Gene Set Enrichment (GSEA)" = "gsea"),
-                   selected = "ora"),
-        
-        conditionalPanel(
-          condition = "input.enrich_type == 'ora' && input.enrich_source == 'de'",
-          selectInput("enrich_gene_direction", "Gene Direction",
-                     choices = c("All Significant Genes" = "all",
-                                "Upregulated Only (positive log2FC)" = "up",
-                                "Downregulated Only (negative log2FC)" = "down"),
-                     selected = "all")
-        ),
-        
-        selectInput("enrich_database", "Database",
-                   choices = c("MSigDB Hallmarks" = "hallmark",
-                              "GO Biological Process" = "go_bp",
-                              "GO Molecular Function" = "go_mf",
-                              "GO Cellular Component" = "go_cc",
-                              "KEGG" = "kegg",
-                              "Reactome" = "reactome"),
-                   selected = "hallmark"),
-        
-        selectInput("enrich_organism", "Organism",
-                   choices = c("Human" = "human", "Mouse" = "mouse"),
-                   selected = "human"),
-        
-        hr(),
-        h5("Parameters"),
-        
-        numericInput("enrich_pval", "P-value Cutoff", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
-        numericInput("enrich_qval", "Q-value Cutoff", value = 0.05, min = 0.001, max = 0.1, step = 0.01),
-        numericInput("enrich_minsize", "Min Gene Set Size", value = 10, min = 5, max = 100),
-        numericInput("enrich_maxsize", "Max Gene Set Size", value = 500, min = 100, max = 2000),
-        
-        br(),
-        actionButton("run_enrichment", "Run Enrichment Analysis", class="btn-primary btn-block"),
-        
-        hr(),
-        h5("Export Results"),
-        downloadButton("download_enrichment", "Download Results (CSV)", class="btn-success btn-block"),
-        
-        hr(),
-        h5("Export Plots"),
-        selectInput("enrich_plot_format", "Format", choices = c("png", "pdf", "jpg"), selected = "png"),
-        numericInput("enrich_plot_width", "Width (inches)", value = 10, min = 4, max = 20),
-        numericInput("enrich_plot_height", "Height (inches)", value = 8, min = 4, max = 20),
-        
-        conditionalPanel(
-          condition = "input.enrich_type == 'ora'",
-          downloadButton("download_enrichment_dotplot", "Download Dot Plot", class="btn-info btn-block"),
-          downloadButton("download_enrichment_barplot", "Download Bar Plot", class="btn-info btn-block"),
-          downloadButton("download_enrichment_network", "Download Network Plot", class="btn-info btn-block")
-        ),
-        
-        conditionalPanel(
-          condition = "input.enrich_type == 'gsea'",
-          downloadButton("download_enrichment_gsea", "Download GSEA Curves", class="btn-info btn-block")
-        )
-      ),
-      mainPanel(
-        width = 9,
-        uiOutput("enrichment_plots_ui")
-      )
-    )
-  ),
   
   tabPanel("Heatmap",
     sidebarLayout(
@@ -677,680 +519,15 @@ server <- function(input, output, session) {
     })
   })
   
-  # --- DE Reactive Values & Logic ---
-  de_results <- reactiveVal(NULL)
-  
-  # Update DE metadata column choices (categorical only)
-  observe({
-    req(seurat_obj())
-    obj <- seurat_obj()
-    
-    # Get only categorical metadata columns
-    categorical_cols <- names(obj@meta.data)[
-      sapply(obj@meta.data, function(x) is.factor(x) || is.character(x))
-    ]
-    
-    updateSelectInput(session, "de_group_by", choices = categorical_cols, 
-                     selected = if("seurat_clusters" %in% categorical_cols) "seurat_clusters" else categorical_cols[1])
-  })
-  
-  # Update Ident 1 and Ident 2 based on chosen metadata column
-  observeEvent(input$de_group_by, {
-    req(seurat_obj(), input$de_group_by)
-    lvls <- sort(unique(as.character(seurat_obj()@meta.data[[input$de_group_by]])))
-    updateSelectInput(session, "de_ident_1", choices = lvls)
-    updateSelectInput(session, "de_ident_2", choices = c("All Others", lvls))
-  })
-  
-  observeEvent(input$run_de, {
-    req(seurat_obj(), input$de_group_by, input$de_ident_1)
-    
-    withProgress(message = "Calculating Markers...", value = 0, {
-      tryCatch({
-        obj <- seurat_obj()
-        # Set Idents safely on a copy or isolated
-        Idents(obj) <- input$de_group_by
-        
-        ident2 <- if(input$de_ident_2 == "All Others") NULL else input$de_ident_2
-        
-        incProgress(0.5, detail = "Running FindMarkers (this may take a minute)")
-        
-        res <- FindMarkers(
-          obj, 
-          ident.1 = input$de_ident_1, 
-          ident.2 = ident2,
-          logfc.threshold = input$de_logfc,
-          min.pct = input$de_minpct,
-          test.use = input$de_test
-        )
-        
-        res$gene <- rownames(res)
-        de_results(res)
-        
-        showNotification("DE complete!", type="message")
-      }, error = function(e) {
-        showNotification(paste("DE Error:", e$message), type="error")
-      })
-    })
-  })
-  
-  output$de_table <- DT::renderDT({
-    req(de_results())
-    DT::datatable(de_results(), options = list(pageLength = 10, scrollX = TRUE), rownames = FALSE) %>%
-      DT::formatRound(columns = c("p_val", "avg_log2FC", "pct.1", "pct.2", "p_val_adj"), digits = 4)
-  })
-  
-  # Reactive volcano plot (for display and download)
-  volcano_plot <- reactive({
-    req(de_results())
-    df <- de_results()
-    
-    # Get threshold values from inputs
-    logfc_thresh <- input$de_logfc
-    pval_thresh <- input$de_pval
-    if (is.null(pval_thresh)) pval_thresh <- 0.05
-    
-    # Get aesthetic controls
-    pt_size <- input$volcano_pt_size
-    if (is.null(pt_size)) pt_size <- 2
-    alpha_val <- input$volcano_alpha
-    if (is.null(alpha_val)) alpha_val <- 0.6
-    sig_color <- input$volcano_sig_color
-    if (is.null(sig_color)) sig_color <- "#E74C3C"
-    nonsig_color <- input$volcano_nonsig_color
-    if (is.null(nonsig_color)) nonsig_color <- "#95A5A6"
-    
-    # Determine significance based on user's threshold
-    df$significant <- df$p_val_adj < pval_thresh
-    
-    # Calculate symmetric x-axis limits
-    max_abs_fc <- max(abs(df$avg_log2FC), na.rm = TRUE)
-    x_limit <- ceiling(max_abs_fc * 1.1)  # Add 10% padding
-    
-    ggplot(df, aes(x = avg_log2FC, y = -log10(p_val), text = gene, color = significant)) +
-      geom_point(size = pt_size, alpha = alpha_val) +
-      # Add threshold lines
-      geom_hline(yintercept = -log10(pval_thresh), linetype = "dashed", color = "black", linewidth = 0.8) +
-      geom_vline(xintercept = c(-logfc_thresh, logfc_thresh), linetype = "dashed", color = "black", linewidth = 0.8) +
-      # Symmetric x-axis
-      coord_cartesian(xlim = c(-x_limit, x_limit)) +
-      theme_minimal() +
-      scale_color_manual(values = c(nonsig_color, sig_color), name = paste0("p-adj < ", pval_thresh)) +
-      labs(title = paste("Volcano Plot:", input$de_ident_1, "vs", input$de_ident_2),
-           x = "avg_log2FC", y = "-log10(p-value)")
-  })
-  
-  output$de_volcano <- renderPlotly({
-    req(volcano_plot())
-    ggplotly(volcano_plot(), tooltip = "text")
-  })
-  
-  output$download_volcano <- downloadHandler(
-    filename = function() { 
-      paste0("Volcano_", input$de_ident_1, "_vs_", input$de_ident_2, "_", Sys.Date(), ".", input$volcano_format) 
-    },
-    content = function(file) {
-      req(volcano_plot())
-      ggsave(file, volcano_plot(), 
-             width = input$volcano_width, 
-             height = input$volcano_height, 
-             device = input$volcano_format)
-    }
-  )
-  
-  output$download_de <- downloadHandler(
-    filename = function() { paste0("DE_", input$de_ident_1, "_vs_", input$de_ident_2, "_", Sys.Date(), ".csv") },
-    content = function(file) {
-      req(de_results())
-      write.csv(de_results(), file, row.names = FALSE)
-    }
-  )
-  # ===== PATHWAY ENRICHMENT LOGIC =====
-  
-  enrichment_results <- reactiveVal(NULL)
-  
-  # Helper function: Convert gene symbols to Entrez IDs
-  convert_to_entrez <- function(genes, organism = "human") {
-    if (!has_enrichment) return(NULL)
-    
-    tryCatch({
-      if (organism == "human") {
-        suppressMessages(library(org.Hs.eg.db))
-        org_db <- org.Hs.eg.db
-      } else {
-        suppressMessages(library(org.Mm.eg.db))
-        org_db <- org.Mm.eg.db
-      }
-      
-      gene_map <- bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", 
-                      OrgDb = org_db, drop = TRUE)
-      return(gene_map)
-    }, error = function(e) {
-      showNotification(paste("Gene ID conversion error:", e$message), type = "error")
-      return(NULL)
-    })
-  }
-  
-  # Helper function: Get gene sets from database
-  get_gene_sets <- function(database, organism) {
-    if (!has_enrichment) return(NULL)
-    
-    tryCatch({
-      species <- ifelse(organism == "human", "Homo sapiens", "Mus musculus")
-      
-      if (database == "hallmark") {
-        msigdbr(species = species, category = "H")
-      } else if (database == "reactome") {
-        msigdbr(species = species, category = "C2", subcategory = "CP:REACTOME")
-      } else {
-        # For GO and KEGG, we'll use clusterProfiler's built-in functions
-        NULL
-      }
-    }, error = function(e) {
-      showNotification(paste("Database loading error:", e$message), type = "error")
-      return(NULL)
-    })
-  }
-  
-  # Run enrichment analysis
-  observeEvent(input$run_enrichment, {
-    req(has_enrichment)
-    
-    # Get gene list
-    if (input$enrich_source == "de") {
-      req(de_results())
-      df <- de_results()
-      
-      # For ORA: use only significant genes (typically upregulated/significant)
-      # For GSEA: use all genes ranked by fold change
-      if (input$enrich_type == "ora") {
-        # Filter to significant genes (p_val_adj < 0.05)
-        df_sig <- df[df$p_val_adj < 0.05, ]
-        if (nrow(df_sig) == 0) {
-          showNotification("No significant genes found for ORA. Please adjust DE p-value threshold.", 
-                          type = "error")
-          return(NULL)
-        }
-        
-        # Apply direction filter
-        direction <- input$enrich_gene_direction
-        if (is.null(direction)) direction <- "all"
-        
-        if (direction == "up") {
-          # Upregulated in Group 1 (positive log2FC)
-          df_sig <- df_sig[df_sig$avg_log2FC > 0, ]
-          direction_label <- "upregulated"
-        } else if (direction == "down") {
-          # Downregulated in Group 1 (negative log2FC)
-          df_sig <- df_sig[df_sig$avg_log2FC < 0, ]
-          direction_label <- "downregulated"
-        } else {
-          direction_label <- "significant"
-        }
-        
-        if (nrow(df_sig) == 0) {
-          showNotification(paste("No", direction_label, "genes found. Try different direction."), 
-                          type = "error")
-          return(NULL)
-        }
-        
-        genes <- df_sig$gene
-        gene_fc <- setNames(df_sig$avg_log2FC, df_sig$gene)
-        showNotification(paste("Using", length(genes), direction_label, "genes from DE results"), 
-                        type = "message")
-      } else {
-        # GSEA uses all genes ranked by fold change
-        genes <- df$gene
-        gene_fc <- setNames(df$avg_log2FC, df$gene)
-        showNotification(paste("Using", length(genes), "ranked genes for GSEA"), 
-                        type = "message")
-      }
-    } else {
-      req(input$enrich_genes)
-      genes <- strsplit(input$enrich_genes, "\\n")[[1]]
-      genes <- trimws(genes)
-      genes <- genes[genes != ""]
-      gene_fc <- NULL
-    }
-    
-    if (length(genes) == 0) {
-      showNotification("No genes provided", type = "error")
-      return(NULL)
-    }
-    
-    # Show progress
-    withProgress(message = "Running enrichment analysis...", value = 0, {
-      
-      # Convert to Entrez IDs
-      incProgress(0.2, detail = "Converting gene IDs")
-      gene_map <- convert_to_entrez(genes, input$enrich_organism)
-      
-      if (is.null(gene_map) || nrow(gene_map) == 0) {
-        showNotification("No genes could be mapped to Entrez IDs", type = "error")
-        return(NULL)
-      }
-      
-      showNotification(paste(nrow(gene_map), "out of", length(genes), "genes mapped"), 
-                      type = "message")
-      
-      # Get organism database
-      if (input$enrich_organism == "human") {
-        suppressMessages(library(org.Hs.eg.db))
-        org_db <- org.Hs.eg.db
-      } else {
-        suppressMessages(library(org.Mm.eg.db))
-        org_db <- org.Mm.eg.db
-      }
-      
-      # Run analysis based on type
-      incProgress(0.3, detail = "Running enrichment")
-      
-      result <- tryCatch({
-        if (input$enrich_type == "ora") {
-          # Over-Representation Analysis
-          if (input$enrich_database %in% c("go_bp", "go_mf", "go_cc")) {
-            ont <- switch(input$enrich_database,
-                         "go_bp" = "BP",
-                         "go_mf" = "MF",
-                         "go_cc" = "CC")
-            enrichGO(gene = gene_map$ENTREZID,
-                    OrgDb = org_db,
-                    ont = ont,
-                    pAdjustMethod = "BH",
-                    pvalueCutoff = input$enrich_pval,
-                    qvalueCutoff = input$enrich_qval,
-                    minGSSize = input$enrich_minsize,
-                    maxGSSize = input$enrich_maxsize)
-          } else if (input$enrich_database == "kegg") {
-            organism_code <- ifelse(input$enrich_organism == "human", "hsa", "mmu")
-            enrichKEGG(gene = gene_map$ENTREZID,
-                      organism = organism_code,
-                      pAdjustMethod = "BH",
-                      pvalueCutoff = input$enrich_pval,
-                      qvalueCutoff = input$enrich_qval,
-                      minGSSize = input$enrich_minsize,
-                      maxGSSize = input$enrich_maxsize)
-          } else {
-            # MSigDB (Hallmark, Reactome)
-            gene_sets <- get_gene_sets(input$enrich_database, input$enrich_organism)
-            if (is.null(gene_sets)) {
-              showNotification("Failed to load gene sets", type = "error")
-              return(NULL)
-            }
-            
-            term2gene <- gene_sets %>% dplyr::select(gs_name, entrez_gene)
-            enricher(gene = gene_map$ENTREZID,
-                    TERM2GENE = term2gene,
-                    pAdjustMethod = "BH",
-                    pvalueCutoff = input$enrich_pval,
-                    qvalueCutoff = input$enrich_qval,
-                    minGSSize = input$enrich_minsize,
-                    maxGSSize = input$enrich_maxsize)
-          }
-        } else {
-          # GSEA
-          # Prepare ranked gene list
-          if (is.null(gene_fc)) {
-            showNotification("GSEA requires fold change values. Please use DE results.", 
-                           type = "error")
-            return(NULL)
-          }
-          
-          # Map fold changes to Entrez IDs
-          gene_list <- gene_fc[gene_map$SYMBOL]
-          names(gene_list) <- gene_map$ENTREZID[match(names(gene_list), gene_map$SYMBOL)]
-          gene_list <- sort(gene_list, decreasing = TRUE)
-          gene_list <- gene_list[!is.na(names(gene_list))]
-          
-          if (input$enrich_database %in% c("go_bp", "go_mf", "go_cc")) {
-            ont <- switch(input$enrich_database,
-                         "go_bp" = "BP",
-                         "go_mf" = "MF",
-                         "go_cc" = "CC")
-            gseGO(geneList = gene_list,
-                 OrgDb = org_db,
-                 ont = ont,
-                 pAdjustMethod = "BH",
-                 pvalueCutoff = input$enrich_pval,
-                 minGSSize = input$enrich_minsize,
-                 maxGSSize = input$enrich_maxsize)
-          } else if (input$enrich_database == "kegg") {
-            organism_code <- ifelse(input$enrich_organism == "human", "hsa", "mmu")
-            gseKEGG(geneList = gene_list,
-                   organism = organism_code,
-                   pAdjustMethod = "BH",
-                   pvalueCutoff = input$enrich_pval,
-                   minGSSize = input$enrich_minsize,
-                   maxGSSize = input$enrich_maxsize)
-          } else {
-            # MSigDB (Hallmark, Reactome)
-            gene_sets <- get_gene_sets(input$enrich_database, input$enrich_organism)
-            if (is.null(gene_sets)) {
-              showNotification("Failed to load gene sets", type = "error")
-              return(NULL)
-            }
-            
-            term2gene <- gene_sets %>% dplyr::select(gs_name, entrez_gene)
-            GSEA(geneList = gene_list,
-                TERM2GENE = term2gene,
-                pAdjustMethod = "BH",
-                pvalueCutoff = input$enrich_pval,
-                minGSSize = input$enrich_minsize,
-                maxGSSize = input$enrich_maxsize)
-          }
-        }
-      }, error = function(e) {
-        showNotification(paste("Enrichment error:", e$message), type = "error")
-        return(NULL)
-      })
-      
-      incProgress(0.5, detail = "Processing results")
-      
-      if (!is.null(result) && nrow(result@result) > 0) {
-        # Convert Entrez IDs to gene symbols for better readability
-        if (input$enrich_organism == "human") {
-          suppressMessages(library(org.Hs.eg.db))
-          org_db <- org.Hs.eg.db
-        } else {
-          suppressMessages(library(org.Mm.eg.db))
-          org_db <- org.Mm.eg.db
-        }
-        
-        result <- setReadable(result, OrgDb = org_db, keyType = "ENTREZID")
-        enrichment_results(result)
-        showNotification(paste("Found", nrow(result@result), "enriched pathways"), 
-                        type = "message")
-      } else {
-        showNotification("No significant enrichment found", type = "warning")
-        enrichment_results(NULL)
-      }
-    })
-  })
-  
-  # Dynamic UI for enrichment plots based on analysis type
-  output$enrichment_plots_ui <- renderUI({
-    if (input$enrich_type == "ora") {
-      tabsetPanel(
-        tabPanel("Results Table",
-          br(),
-          DT::DTOutput("enrichment_table")
-        ),
-        tabPanel("Dot Plot",
-          br(),
-          plotOutput("enrichment_dotplot", height = "600px")
-        ),
-        tabPanel("Bar Plot",
-          br(),
-          plotOutput("enrichment_barplot", height = "600px")
-        ),
-        tabPanel("Network Plot",
-          br(),
-          plotOutput("enrichment_network", height = "700px")
-        )
-      )
-    } else {
-      # GSEA - only show results table and enrichment score plots
-      tabsetPanel(
-        tabPanel("Results Table",
-          br(),
-          DT::DTOutput("enrichment_table")
-        ),
-        tabPanel("GSEA Enrichment Curves",
-          br(),
-          plotOutput("enrichment_gsea", height = "800px")
-        )
-      )
-    }
-  })
   
   
-  
-  # Results table
-  output$enrichment_table <- DT::renderDT({
-    req(enrichment_results())
-    result_df <- as.data.frame(enrichment_results())
-    
-    DT::datatable(result_df, 
-                 options = list(pageLength = 25, scrollX = TRUE),
-                 filter = "top") %>%
-      DT::formatRound(columns = c("pvalue", "p.adjust", "qvalue"), digits = 4)
-  })
-  
-  # Reactive plot objects for reuse in display and download
-  enrichment_dotplot_obj <- reactive({
-    req(enrichment_results())
-    dotplot(enrichment_results(), showCategory = 20) + 
-      theme(axis.text.y = element_text(size = 10))
-  })
-  
-  enrichment_barplot_obj <- reactive({
-    req(enrichment_results())
-    barplot(enrichment_results(), showCategory = 20) +
-      theme(axis.text.y = element_text(size = 10))
-  })
-  
-  enrichment_network_obj <- reactive({
-    req(enrichment_results())
-    result_sim <- pairwise_termsim(enrichment_results())
-    emapplot(result_sim, showCategory = 30)
-  })
-  
-  # Dot plot
-  output$enrichment_dotplot <- renderPlot({
-    req(enrichment_dotplot_obj())
-    tryCatch({
-      enrichment_dotplot_obj()
-    }, error = function(e) {
-      ggplot() + annotate("text", x = 0, y = 0, 
-                         label = paste("Plot error:", e$message), 
-                         size = 4, color = "red") + theme_void()
-    })
-  })
-  
-  
-  # Bar plot
-  output$enrichment_barplot <- renderPlot({
-    req(enrichment_barplot_obj())
-    tryCatch({
-      enrichment_barplot_obj()
-    }, error = function(e) {
-      ggplot() + annotate("text", x = 0, y = 0, 
-                         label = paste("Plot error:", e$message), 
-                         size = 4, color = "red") + theme_void()
-    })
-  })
-  
-  
-  # Network plot
-  output$enrichment_network <- renderPlot({
-    req(enrichment_network_obj())
-    tryCatch({
-      enrichment_network_obj()
-    }, error = function(e) {
-      ggplot() + annotate("text", x = 0, y = 0, 
-                         label = paste("Network plot error:", e$message), 
-                         size = 4, color = "red") + theme_void()
-    })
-  })
-  
-  # Reactive GSEA plot object for reuse
-  enrichment_gsea_obj <- reactive({
-    req(enrichment_results(), input$enrich_type == "gsea")
-    n_pathways <- min(5, nrow(enrichment_results()))
-    gseaplot2(enrichment_results(), geneSetID = 1:n_pathways, 
-             pvalue_table = TRUE)
-  })
-  
-  # GSEA enrichment plots
-  output$enrichment_gsea <- renderPlot({
-    req(enrichment_gsea_obj())
-    tryCatch({
-      enrichment_gsea_obj()
-    }, error = function(e) {
-      ggplot() + annotate("text", x = 0, y = 0, 
-                         label = paste("GSEA plot error:", e$message), 
-                         size = 4, color = "red") + theme_void()
-    })
-  })
-  
-  
-  # Download enrichment results
-  output$download_enrichment <- downloadHandler(
-    filename = function() { 
-      paste0("Enrichment_", input$enrich_database, "_", Sys.Date(), ".csv") 
-    },
-    content = function(file) {
-      req(enrichment_results())
-      write.csv(as.data.frame(enrichment_results()), file, row.names = FALSE)
-    }
-  )
-  
-  # Download dot plot
-  output$download_enrichment_dotplot <- downloadHandler(
-    filename = function() { 
-      paste0("Enrichment_Dotplot_", input$enrich_database, "_", Sys.Date(), ".", input$enrich_plot_format) 
-    },
-    content = function(file) {
-      req(enrichment_dotplot_obj())
-      ggsave(file, enrichment_dotplot_obj(), 
-             width = input$enrich_plot_width, 
-             height = input$enrich_plot_height, 
-             device = input$enrich_plot_format)
-    }
-  )
-  
-  # Download bar plot
-  output$download_enrichment_barplot <- downloadHandler(
-    filename = function() { 
-      paste0("Enrichment_Barplot_", input$enrich_database, "_", Sys.Date(), ".", input$enrich_plot_format) 
-    },
-    content = function(file) {
-      req(enrichment_barplot_obj())
-      ggsave(file, enrichment_barplot_obj(), 
-             width = input$enrich_plot_width, 
-             height = input$enrich_plot_height, 
-             device = input$enrich_plot_format)
-    }
-  )
-  
-  # Download network plot
-  output$download_enrichment_network <- downloadHandler(
-    filename = function() { 
-      paste0("Enrichment_Network_", input$enrich_database, "_", Sys.Date(), ".", input$enrich_plot_format) 
-    },
-    content = function(file) {
-      req(enrichment_network_obj())
-      ggsave(file, enrichment_network_obj(), 
-             width = input$enrich_plot_width, 
-             height = input$enrich_plot_height, 
-             device = input$enrich_plot_format)
-    }
-  )
-  
-  # Download GSEA enrichment curves
-  output$download_enrichment_gsea <- downloadHandler(
-    filename = function() { 
-      paste0("Enrichment_GSEA_", input$enrich_database, "_", Sys.Date(), ".", input$enrich_plot_format) 
-    },
-    content = function(file) {
-      req(enrichment_gsea_obj())
-      ggsave(file, enrichment_gsea_obj(), 
-             width = input$enrich_plot_width, 
-             height = input$enrich_plot_height, 
-             device = input$enrich_plot_format)
-    }
-  )
-  
-  # ===== END PATHWAY ENRICHMENT LOGIC =====
   
   output$obj_info <- renderText({ 
     req(seurat_obj())
     paste(ncol(seurat_obj()), "cells,", nrow(seurat_obj()), "features")
   })
   
-  # Preview plot in subsetting tab
-  output$preview_plot <- renderPlot({
-    req(seurat_obj())
-    tryCatch({
-      red <- names(seurat_obj()@reductions)[1]
-      if (!is.null(red)) {
-        DimPlot(seurat_obj(), reduction=red, pt.size=0.5) + 
-          theme(legend.position="right", legend.text=element_text(size=8))
-      } else {
-        ggplot() + annotate("text", x=0, y=0, label="No reductions available") + theme_void()
-      }
-    }, error=function(e) ggplot() + theme_void())
-  })
-  
-  # --- Subsetting ---
-  observe({ 
-    req(seurat_obj())
-    updateSelectInput(session, "subset_col", choices=names(seurat_obj()@meta.data))
-  })
-  
-  observeEvent(input$subset_col, { 
-    req(seurat_obj())
-    vals <- sort(unique(seurat_obj()@meta.data[[input$subset_col]]))
-    updateSelectizeInput(session, "subset_levels", choices=vals)
-  })
-  
-  observeEvent(input$apply_subset_meta, {
-    req(seurat_obj(), input$subset_levels)
-    cells <- rownames(seurat_obj()@meta.data[seurat_obj()@meta.data[[input$subset_col]] %in% input$subset_levels, ])
-    seurat_obj(subset(seurat_obj(), cells=cells))
-    showNotification(paste("Filtered to", length(cells), "cells"), type="message")
-  })
-  
-  observeEvent(input$reset_data, { 
-    seurat_obj(original_obj())
-    showNotification("Reset to original", type="message")
-  })
-  
-  # --- UCell ---
-  observeEvent(input$calc_ucell, {
-    req(seurat_obj(), input$sig_genes, input$sig_name)
-    if(!has_ucell) { 
-      showNotification("UCell not installed", type="error")
-      return()
-    }
-    
-    genes <- trimws(unlist(strsplit(input$sig_genes, "\n")))
-    genes <- genes[genes != ""]
-    
-    if(length(genes) == 0) {
-      showNotification("No genes provided", type="warning")
-      return()
-    }
-    
-    sig_list <- list()
-    sig_list[[input$sig_name]] <- genes
-    
-    tryCatch({
-      # Use isolate to prevent triggering plot updates
-      obj <- isolate(seurat_obj())
-      obj <- AddModuleScore_UCell(obj, features=sig_list, name=NULL)
-      
-      # Find the actual column name
-      sig_col <- grep(input$sig_name, colnames(obj@meta.data), value=TRUE)[1]
-      
-      # Update object without triggering plots
-      isolate({
-        seurat_obj(obj)
-        
-        # Force update of all feature dropdowns
-        all_features <- c(rownames(obj), colnames(obj@meta.data))
-        lapply(c("p1","p2","p3","p4"), function(id) {
-          updateSelectizeInput(session, paste0(id, "-feature"), choices=all_features)
-        })
-      })
-      
-      showNotification(paste("UCell score added:", sig_col, "\nYou can now plot it in FeaturePlot or ViolinPlot"), type="message", duration=8)
-      
-    }, error=function(e) {
-      showNotification(paste("UCell error:", e$message), type="error")
-    })
-  })
-  
+
   # --- Color Helper (Refactored to use color_utils.R) ---
   get_colors <- function(id, obj, group_var, for_scpubr = FALSE) {
     ns <- function(x) paste0(id, "-", x)
@@ -1440,9 +617,18 @@ server <- function(input, output, session) {
       # FeaturePlot module
       params <- validate_feature_plot_params(input, ns, obj)
       if (!is.null(params)) {
-        # For continuous scales, use first and last color if available
+        # For continuous scales, use first/last (or middle for diverging)
         feat_colors <- if(!is.null(colors) && length(colors) >= 2) {
-          c(colors[1], colors[length(colors)])
+          is_diverging <- !is.null(input[[ns("color_source")]]) && 
+                          input[[ns("color_source")]] == "Palette" &&
+                          !is.null(input[[ns("palette_name")]]) &&
+                          input[[ns("palette_name")]] %in% c("RdBu", "RdYlBu", "RdYlGn", "Spectral")
+          
+          if (is_diverging && length(colors) >= 3) {
+            c(colors[1], "#FFFFFF", colors[length(colors)])
+          } else {
+            c(colors[1], colors[length(colors)])
+          }
         } else {
           NULL
         }
@@ -1473,7 +659,6 @@ server <- function(input, output, session) {
           obj = obj,
           features = params$features,
           group_by = params$group_by,
-          split_by = params$split_by,
           assay = assay,
           layer = layer,
           colors = colors,
@@ -1488,9 +673,18 @@ server <- function(input, output, session) {
       # DotPlot module
       params <- validate_dot_plot_params(input, ns, obj)
       if (!is.null(params)) {
-        # For continuous scales, use first and last color if available
+        # For continuous scales, use first/last (or middle for diverging)
         dot_colors <- if(!is.null(colors) && length(colors) >= 2) {
-          c(colors[1], colors[length(colors)])
+          is_diverging <- !is.null(input[[ns("color_source")]]) && 
+                          input[[ns("color_source")]] == "Palette" &&
+                          !is.null(input[[ns("palette_name")]]) &&
+                          input[[ns("palette_name")]] %in% c("RdBu", "RdYlBu", "RdYlGn", "Spectral")
+          
+          if (is_diverging && length(colors) >= 3) {
+            c(colors[1], "#FFFFFF", colors[length(colors)])
+          } else {
+            c(colors[1], colors[length(colors)])
+          }
         } else {
           NULL
         }
@@ -1586,7 +780,7 @@ server <- function(input, output, session) {
         tagList(
           if(ptype %in% c("DimPlot","FeaturePlot")) selectInput(ns("reduction"), "Reduction", choices=reds),
           if(ptype %in% c("DimPlot","ViolinPlot","DotPlot")) selectInput(ns("group_by"), "Group By", choices=categorical_metas),
-          selectInput(ns("split_by"), "Split By", choices=c("None", categorical_metas[-1])),
+          if(ptype %in% c("DimPlot","FeaturePlot")) selectInput(ns("split_by"), "Split By", choices=c("None", categorical_metas[-1])),
           
           # Assay and Layer selection for plots that use expression data
           if(ptype %in% c("FeaturePlot","ViolinPlot","DotPlot")) tagList(
@@ -1665,11 +859,6 @@ server <- function(input, output, session) {
       }
     })
     
-    # Plot style UI
-    output[[ns("plot_style_ui")]] <- renderUI({
-      selectInput(ns("plot_style"), "Plot Style", choices = c("Standard"))
-    })
-    
     # Manual color UI
     output[[ns("manual_color_ui")]] <- renderUI({
       req(seurat_obj(), input[[ns("color_source")]] == "Manual")
@@ -1685,14 +874,46 @@ server <- function(input, output, session) {
         lvls <- sort(unique(seurat_obj()@meta.data[[grp]]))
       }
       
-      # Create scrollable div for many levels
+      # Combo HTML5 Color Picker + Text field with Apply button and JS Sync
       color_pickers <- lapply(lvls, function(l) {
-        colourInput(ns(paste0("col_", l)), paste("Color", l), value="gray")
+        safe_l <- make.names(l)
+        picker_id <- paste0("col_picker_", safe_l)
+        text_id <- paste0("col_text_", safe_l)
+        apply_id <- paste0("apply_color_", safe_l)
+        
+        fluidRow(
+          style = "margin-bottom: 5px; align-items: center; display: flex;",
+          column(3, tags$strong(paste("Color", l))),
+          column(3, tags$input(
+            type="color", 
+            id=ns(picker_id), 
+            value="#808080", 
+            style="width:100%; height:34px; border:1px solid #ccc; padding:0; cursor:pointer;",
+            oninput = sprintf("var el = document.getElementById('%s'); if(el) { el.value = this.value; el.dispatchEvent(new Event('input', {bubbles: true})); }", ns(text_id))
+          )),
+          column(4, 
+            textInput(ns(text_id), label = NULL, value = "", placeholder = "#808080"),
+            tags$script(HTML(sprintf("
+              setTimeout(function() {
+                var txt = document.getElementById('%s');
+                var picker = document.getElementById('%s');
+                if(txt && picker) {
+                  txt.addEventListener('input', function(e) {
+                      if(/^#[0-9A-Fa-f]{6}$/i.test(e.target.value)) {
+                          picker.value = e.target.value;
+                      }
+                  });
+                }
+              }, 100);
+            ", ns(text_id), ns(picker_id))))
+          ),
+          column(2, actionButton(ns(apply_id), "Apply", style="padding:4px 8px; font-size:12px; margin-top:2px;"))
+        )
       })
       
       if (length(lvls) > 20) {
-        div(style="max-height: 400px; overflow-y: auto; padding: 5px;",
-            p(paste("Showing", length(lvls), "color pickers (scroll to see all)")),
+        div(style="max-height: 400px; overflow-y: auto; padding: 5px; overflow-x: hidden;",
+            p(paste("Showing", length(lvls), "inputs (scroll to see all)")),
             color_pickers)
       } else {
         color_pickers
@@ -1734,7 +955,14 @@ server <- function(input, output, session) {
     if (length(lvls) > 50) return(p("Too many levels for manual colors"))
     
     lapply(lvls, function(l) {
-      colourInput(paste0("hm_col_", l), paste("Color", l), value = "#808080")
+      safe_l <- make.names(l)
+      fluidRow(
+        style = "margin-bottom: 5px; align-items: center; display: flex;",
+        column(4, tags$strong(paste("Color", l))),
+        column(3, tags$input(type="color", id=paste0("hm_col_picker_", safe_l), value="#808080", 
+                             style="width:100%; height:34px; border:1px solid #ccc; padding:0; cursor:pointer;")),
+        column(5, textInput(paste0("hm_col_text_", safe_l), label = NULL, value = "", placeholder = "#FF0000"))
+      )
     })
   })
   
@@ -1808,8 +1036,17 @@ server <- function(input, output, session) {
           if (!is.null(anno_cols)) names(anno_cols) <- lvls
         } else if (anno_source == "Manual") {
           anno_cols <- sapply(lvls, function(l) {
-            c <- input[[paste0("hm_col_", l)]]
-            if(is.null(c)) "#808080" else c
+            safe_l <- make.names(l)
+            col_text <- input[[paste0("hm_col_text_", safe_l)]]
+            col_picker <- input[[paste0("hm_col_picker_", safe_l)]]
+            
+            if (!is.null(col_text) && trimws(col_text) != "") {
+              trimws(col_text)
+            } else if (!is.null(col_picker)) {
+              col_picker
+            } else {
+              "#808080"
+            }
           })
           names(anno_cols) <- lvls
         }
@@ -1839,6 +1076,12 @@ server <- function(input, output, session) {
           # 4. Apply expression color palette
           if (pal %in% names(option_map)) {
             p <- p + scale_fill_viridis(option = option_map[[pal]], name = legend_title)
+          } else if (pal %in% c("RdBu", "RdYlBu", "RdYlGn", "Spectral")) {
+            p <- p + scale_fill_gradient2(
+              low = rev(RColorBrewer::brewer.pal(n = 11, name = pal))[1], 
+              mid = "white", 
+              high = rev(RColorBrewer::brewer.pal(n = 11, name = pal))[11], 
+              midpoint = 0, name = legend_title)
           } else {
             p <- p + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 11, name = pal)), name = legend_title)
           }

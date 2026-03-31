@@ -11,52 +11,42 @@ A comprehensive R Shiny application for interactive visualization and analysis o
 - **Color Palettes**: Viridis, RColorBrewer, MetBrewer, or manual color selection
 - **Interactive Controls**: Point size, orientation, split.by, group.by
 
-### Analysis
-- **Differential Expression**: 
-  - Group-vs-Group or One-vs-Rest comparisons
-  - Interactive results table with sorting/filtering
-  - Volcano plots with threshold lines
-  - CSV export
-- **UCell Signatures**: Calculate and visualize gene signature scores
-- **Data Subsetting**: Filter cells by metadata or gene expression
-
 ### File Support
-- Seurat objects (`.rds`) up to 10GB
-- H5AD files (`.h5ad`) with automatic conversion
-- H5Seurat files (`.h5seurat`)
+- Seurat objects (`.rds`)
 
-## Quick Start
+## Quick Start (Docker)
 
-### Option 1: Local R Installation
+### Option 1: download pre-built docker container (recommended)
 
-1. **Install Dependencies**:
-```r
-source("setup.R")
-```
+The app runs in Docker, with all R packages version controlled  via `renv.lock` for reproducibility.  In this option, there is no need to build the container.  User can used a pre-built container from dockerhub.
 
-2. **Launch the App**:
-```r
-library(shiny)
-runApp(".")
-```
-
-3. **Access**: The app will open automatically in your default browser at `http://127.0.0.1:XXXX`
-
-### Option 2: Docker (Recommended for Deployment)
-
-1. **Build and Run**:
 ```bash
-docker-compose up -d
+# 1. Download image from DockerHub
+sudo docker pull tbrunetti/interactive_seuart_visualizer:dev_03302026
+
+# 2. Run the container on the command line
+sudo docker run -d -p 3838:3838 tbrunetti/interactive_seuart_visualizer:dev_03302026
+
+# 3. Access the app by opening your favorite web browser and going to the following link
+http://localhost:3838 **or** http://0.0.0.0:3838
 ```
 
-2. **Access**: Open `http://localhost:3838` in your browser
+### Option 2: build docker container and run app
 
-3. **Stop**:
+The app runs in Docker, with all R packages pinned via `renv.lock` for reproducibility.
+
 ```bash
-docker-compose down
+# 1. Build the image (restores all packages from renv.lock)
+sudo docker build -t seurat-shiny-app .
+
+# 2. Run the container
+sudo docker run -d -p 3838:3838 --name seurat-app seurat-shiny-app
+
+# 3. Access the app
+open http://localhost:3838
 ```
 
-See [DOCKER_INSTRUCTIONS.md](DOCKER_INSTRUCTIONS.md) for detailed Docker deployment instructions.
+See [`docs/QUICKSTART.md`](docs/QUICKSTART.md) and [`docs/DOCKER_COMMANDS.md`](docs/DOCKER_COMMANDS.md) for full details.
 
 ## Usage Guide
 
@@ -81,32 +71,7 @@ See [DOCKER_INSTRUCTIONS.md](DOCKER_INSTRUCTIONS.md) for detailed Docker deploym
 - **Active plot** is highlighted with a bold border
 - **Preview plot** in Subsetting tab shows your full dataset
 
-### 3. Differential Expression Tab
-
-#### Run DE Analysis
-1. Select **Comparison Group** (metadata column)
-2. Choose **Ident 1** (group of interest)
-3. Choose **Ident 2** (comparison group or "All Others")
-4. Adjust thresholds (LogFC, Min Pct, Test Type)
-5. Click **Run Differential Expression**
-
-#### View Results
-- **Results Table**: Sortable, searchable table with all markers
-- **Volcano Plot**: Interactive visualization with threshold lines showing your cutoffs
-- **Download CSV**: Export results for further analysis
-
-### 4. Signatures Tab
-- Enter genes (one per line)
-- Name your signature
-- Click **Calculate UCell**
-- Signature scores appear in feature dropdowns as `[Name]_UCell`
-
-### 5. Subsetting Tab
-- **Filter by Metadata**: Select column and levels to keep
-- **Preview**: See your data before filtering
-- **Reset**: Restore original dataset
-
-### 6. Export Tab
+### 3. Export Tab
 - Choose target (single plot or all 4 plots)
 - Select format (PNG, PDF, JPG)
 - Set dimensions
@@ -114,16 +79,8 @@ See [DOCKER_INSTRUCTIONS.md](DOCKER_INSTRUCTIONS.md) for detailed Docker deploym
 
 ## Prerequisites
 
-### For Local Installation
-- R >= 4.0.0
-- Required packages (installed via `setup.R`):
-  - Core: `shiny`, `Seurat`, `ggplot2`, `patchwork`
-  - Visualization: `SCpubr`, `MetBrewer`, `viridis`, `RColorBrewer`
-  - Analysis: `UCell`, `DT`, `ggrepel`
-  - Utilities: `colourpicker`, `cowplot`, `plotly`
-
-### For Docker
-- Docker and Docker Compose
+- Docker (install from [docker.com](https://docker.com))
+- All R packages are managed via `renv.lock` — no local R installation required
 
 ## Tips & Tricks
 
@@ -146,14 +103,25 @@ See [DOCKER_INSTRUCTIONS.md](DOCKER_INSTRUCTIONS.md) for detailed Docker deploym
 ## Project Structure
 
 ```
-seurat_shiny_app/
-├── app.R                    # Main application
-├── setup.R                  # Dependency installer
-├── Dockerfile               # Docker image definition
-├── docker-compose.yml       # Docker orchestration
-├── DOCKER_INSTRUCTIONS.md   # Docker deployment guide
-└── README.md               # This file
+interactive_seurat_visualizer/
+├── app.R                         # Main Shiny application
+├── color_utils.R                 # Unified color palette system
+├── plot_dimension_reduction.R    # DimPlot module
+├── plot_feature.R                # FeaturePlot module
+├── plot_violin.R                 # ViolinPlot module
+├── plot_dot.R                    # DotPlot module
+├── plot_cluster_distribution.R   # ClusterDistrBar module
+├── ui_landing_page.R             # Landing page UI
+├── server_landing_page.R         # Landing page server logic
+├── enrichment_backend.R          # Gene enrichment analysis
+├── setup.R                       # App initialization helpers
+├── renv.lock                     # R package versions (source of truth for Docker)
+├── Dockerfile                    # Docker image (builds from renv.lock)
+├── docker-compose.yml            # Docker orchestration
+└── docs/                         # All documentation (see docs/README.md)
 ```
+
+See [`docs/README.md`](docs/README.md) for the full documentation index.
 
 ## Citation
 
