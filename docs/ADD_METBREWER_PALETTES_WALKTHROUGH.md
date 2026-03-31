@@ -45,12 +45,11 @@ Because you are using `renv.lock` and Docker, all changes run cleanly. To previe
 
 As requested, here is the build and run stack referencing your previously established tags:
 ```bash
-# Bypass the credential helper bug by pointing config to an empty directory
-mkdir -p /tmp/empty-docker
-sudo docker --config /tmp/empty-docker build -t seurat-shiny-app .
+# 1. Rebuild the image from the folder since app.R changed
+docker build -t seurat-shiny-app .
 
-# Run the newly built image
-sudo docker run -d -p 3838:3838 --name seurat-app seurat-shiny-app
+# 2. Run the newly built image on port 3838
+docker run -d -p 3838:3838 --name seurat-app seurat-shiny-app
 ```
 
 Then, visit `http://localhost:3838`.
