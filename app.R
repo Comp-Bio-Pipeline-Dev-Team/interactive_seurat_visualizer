@@ -821,12 +821,26 @@ server <- function(input, output, session) {
     
     
     # Update feature choices server-side for autocomplete
+    # Update feature choices server-side for autocomplete dynamically based on selected assay
     observe({
       req(seurat_obj())
       ptype <- input[[ns("plot_type")]]
       req(ptype)  # Ensure ptype is not NULL
+      
       if (ptype %in% c("FeaturePlot","ViolinPlot","DotPlot")) {
-        all_features <- c(rownames(seurat_obj()), colnames(seurat_obj()@meta.data))
+        obj <- seurat_obj()
+        # Reactive binding to assay selection
+        assay_val <- input[[ns("assay")]]
+        
+        assay_features <- tryCatch({
+          if (!is.null(assay_val) && assay_val %in% names(obj@assays)) {
+            rownames(obj[[assay_val]])
+          } else {
+            rownames(obj)
+          }
+        }, error = function(e) character(0))
+        
+        all_features <- unique(c(assay_features, colnames(obj@meta.data)))
         updateSelectizeInput(session, ns("feature"), choices=all_features, server = TRUE)
       }
     })
