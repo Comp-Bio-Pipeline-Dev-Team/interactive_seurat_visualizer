@@ -109,24 +109,34 @@ plot_feature <- function(obj,
     stop("Reduction must have at least 2 dimensions")
   }
   
-  # Extract expression data from specified assay and layer
-  # Compatible with Seurat v3, v4, and v5
+  # Check that features exist in the specified assay or metadata
+  valid_assay_features <- character(0)
   tryCatch({
-    expr_data <- Seurat::GetAssayData(obj, assay = assay, layer = layer)
+    assay_mat <- Seurat::GetAssayData(obj, assay = assay, layer = layer)
+    valid_assay_features <- rownames(assay_mat)
   }, error = function(e) {
-    stop(paste("Could not extract data from assay", assay, "layer", layer, ":", e$message))
+    # Silent fail; we will just rely on metadata if the layer does not exist
   })
   
-  # Check that features exist
-  missing_features <- features[!features %in% rownames(expr_data)]
+  valid_features <- c(valid_assay_features, colnames(obj@meta.data))
+  missing_features <- features[!features %in% valid_features]
+  
   if (length(missing_features) > 0) {
-    warning(paste("Features not found in assay:", paste(missing_features, collapse = ", ")))
-    features <- features[features %in% rownames(expr_data)]
+    warning(paste("Features not found:", paste(missing_features, collapse = ", ")))
+    features <- features[features %in% valid_features]
   }
   
   if (length(features) == 0) {
-    stop("No valid features found in the specified assay")
+    stop("No valid features found in the specified assay or metadata")
   }
+  
+  # Extract expression data / metadata via FetchData (cells x features)
+  tryCatch({
+    Seurat::DefaultAssay(obj) <- assay
+    expr_data <- Seurat::FetchData(object = obj, vars = features, layer = layer)
+  }, error = function(e) {
+    stop(paste("Could not extract data for features:", e$message))
+  } )
   
   # Create base data frame with coordinates
   plot_df <- data.frame(
@@ -146,7 +156,7 @@ plot_feature <- function(obj,
   # Handle single vs multiple features
   if (length(features) == 1) {
     # Single feature - simple plot
-    plot_df$expression <- as.numeric(expr_data[features, ])
+    plot_df$expression <- as.numeric(expr_data[[features]])
     
     p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = dim1, y = dim2, color = expression)) +
       ggplot2::geom_point(size = pt_size, alpha = 0.8) +
@@ -184,7 +194,7 @@ plot_feature <- function(obj,
     # Multiple features - create long format and facet
     expr_list <- lapply(features, function(feat) {
       df <- plot_df
-      df$expression <- as.numeric(expr_data[feat, ])
+      df$expression <- as.numeric(expr_data[[feat]])
       df$feature <- feat
       return(df)
     })
