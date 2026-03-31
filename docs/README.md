@@ -98,7 +98,8 @@ Workflow:
 | 2026-01-29 | V2 modularization (plot modules) | ✅ Done | [MODULARIZATION_PLAN_V2.md](MODULARIZATION_PLAN_V2.md) | [MODULARIZATION_WALKTHROUGH_FINAL.md](MODULARIZATION_WALKTHROUGH_FINAL.md) |
 | 2026-01-30 | Landing page & metadata management | ✅ Done | [LANDING_PAGE_IMPLEMENTATION_PLAN.md](LANDING_PAGE_IMPLEMENTATION_PLAN.md) | [LANDING_PAGE_STATUS.md](LANDING_PAGE_STATUS.md) |
 | 2026-02-03 | UI enhancements (accordion, sidebar, legends, axes) | ✅ Done | — | [antigravity_prompting/](antigravity_prompting/) |
-| 2026-03-29 | Simplification: remove plotly/DE/ORA | ⏳ In progress | [SIMPLIFICATION_PLAN_03292026.md](SIMPLIFICATION_PLAN_03292026.md) | — |
+| 2026-03-29 | Simplification: remove plotly/DE/ORA | ✅ Done | [SIMPLIFICATION_PLAN_03292026.md](SIMPLIFICATION_PLAN_03292026.md) | — |
+| 2026-03-31 | Redesign manual color selection UI, apply buttons, remove split.by | ✅ Done | [Implementation_Plan_Colors_And_Splits.md](Implementation_Plan_Colors_And_Splits.md) | — |
 
 ---
 
