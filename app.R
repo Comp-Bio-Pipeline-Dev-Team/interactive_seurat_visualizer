@@ -70,11 +70,11 @@ plotControlUI <- function(id) {
           selectInput(ns("color_source"), "Color Source", choices = c("Default", "Palette", "Manual")),
           conditionalPanel(
             condition = sprintf("input['%s'] == 'Palette'", ns("color_source")),
-            selectInput(ns("palette_choice"), "Palette", 
+            selectInput(ns("palette_name"), "Palette", 
                        choices = list(
-                         "Viridis" = c("viridis", "magma", "plasma", "inferno", "cividis"),
-                         "RColorBrewer" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Accent"),
-                         "MetBrewer" = names(MetBrewer::MetPalettes)
+                         "Continuous" = c("viridis", "plasma", "magma", "inferno", "cividis", "Blues", "Reds", "Greens"),
+                         "Diverging" = c("RdBu", "RdYlBu", "RdYlGn", "Spectral"),
+                         "Discrete" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Pastel2", "Accent")
                        ))
           ),
           conditionalPanel(
@@ -110,6 +110,7 @@ plotControlUI <- function(id) {
 
 
 ui <- fluidPage(
+  div(style = "display: none;", colourpicker::colourInput("dummy_color_picker", "Dummy")),
   uiOutput("main_ui")
 )
 
@@ -130,7 +131,7 @@ main_app_navbar <- navbarPage(
         box-shadow: 0 0 10px rgba(52, 152, 219, 0.3);
       }
       
-      /* Independent sidebar scrolling */
+      /* Sidebar properties */
       .sidebar {
         position: fixed;
         top: 50px;
@@ -142,6 +143,11 @@ main_app_navbar <- navbarPage(
         background-color: #f5f5f5;
         padding: 15px;
         z-index: 100;
+      }
+      
+      /* Ensure colourpicker popups stay above the sidebar! */
+      .minicolors-panel {
+        z-index: 1050 !important; 
       }
       
       .main-content {
@@ -611,9 +617,18 @@ server <- function(input, output, session) {
       # FeaturePlot module
       params <- validate_feature_plot_params(input, ns, obj)
       if (!is.null(params)) {
-        # For continuous scales, use first and last color if available
+        # For continuous scales, use first/last (or middle for diverging)
         feat_colors <- if(!is.null(colors) && length(colors) >= 2) {
-          c(colors[1], colors[length(colors)])
+          is_diverging <- !is.null(input[[ns("color_source")]]) && 
+                          input[[ns("color_source")]] == "Palette" &&
+                          !is.null(input[[ns("palette_name")]]) &&
+                          input[[ns("palette_name")]] %in% c("RdBu", "RdYlBu", "RdYlGn", "Spectral")
+          
+          if (is_diverging && length(colors) >= 3) {
+            c(colors[1], "#FFFFFF", colors[length(colors)])
+          } else {
+            c(colors[1], colors[length(colors)])
+          }
         } else {
           NULL
         }
@@ -644,7 +659,6 @@ server <- function(input, output, session) {
           obj = obj,
           features = params$features,
           group_by = params$group_by,
-          split_by = params$split_by,
           assay = assay,
           layer = layer,
           colors = colors,
@@ -659,9 +673,18 @@ server <- function(input, output, session) {
       # DotPlot module
       params <- validate_dot_plot_params(input, ns, obj)
       if (!is.null(params)) {
-        # For continuous scales, use first and last color if available
+        # For continuous scales, use first/last (or middle for diverging)
         dot_colors <- if(!is.null(colors) && length(colors) >= 2) {
-          c(colors[1], colors[length(colors)])
+          is_diverging <- !is.null(input[[ns("color_source")]]) && 
+                          input[[ns("color_source")]] == "Palette" &&
+                          !is.null(input[[ns("palette_name")]]) &&
+                          input[[ns("palette_name")]] %in% c("RdBu", "RdYlBu", "RdYlGn", "Spectral")
+          
+          if (is_diverging && length(colors) >= 3) {
+            c(colors[1], "#FFFFFF", colors[length(colors)])
+          } else {
+            c(colors[1], colors[length(colors)])
+          }
         } else {
           NULL
         }
@@ -757,7 +780,7 @@ server <- function(input, output, session) {
         tagList(
           if(ptype %in% c("DimPlot","FeaturePlot")) selectInput(ns("reduction"), "Reduction", choices=reds),
           if(ptype %in% c("DimPlot","ViolinPlot","DotPlot")) selectInput(ns("group_by"), "Group By", choices=categorical_metas),
-          selectInput(ns("split_by"), "Split By", choices=c("None", categorical_metas[-1])),
+          if(ptype %in% c("DimPlot","FeaturePlot")) selectInput(ns("split_by"), "Split By", choices=c("None", categorical_metas[-1])),
           
           # Assay and Layer selection for plots that use expression data
           if(ptype %in% c("FeaturePlot","ViolinPlot","DotPlot")) tagList(
@@ -851,14 +874,46 @@ server <- function(input, output, session) {
         lvls <- sort(unique(seurat_obj()@meta.data[[grp]]))
       }
       
-      # Create scrollable div for many levels
+      # Combo HTML5 Color Picker + Text field with Apply button and JS Sync
       color_pickers <- lapply(lvls, function(l) {
-        colourInput(ns(paste0("col_", l)), paste("Color", l), value="gray")
+        safe_l <- make.names(l)
+        picker_id <- paste0("col_picker_", safe_l)
+        text_id <- paste0("col_text_", safe_l)
+        apply_id <- paste0("apply_color_", safe_l)
+        
+        fluidRow(
+          style = "margin-bottom: 5px; align-items: center; display: flex;",
+          column(3, tags$strong(paste("Color", l))),
+          column(3, tags$input(
+            type="color", 
+            id=ns(picker_id), 
+            value="#808080", 
+            style="width:100%; height:34px; border:1px solid #ccc; padding:0; cursor:pointer;",
+            oninput = sprintf("var el = document.getElementById('%s'); if(el) { el.value = this.value; el.dispatchEvent(new Event('input', {bubbles: true})); }", ns(text_id))
+          )),
+          column(4, 
+            textInput(ns(text_id), label = NULL, value = "", placeholder = "#808080"),
+            tags$script(HTML(sprintf("
+              setTimeout(function() {
+                var txt = document.getElementById('%s');
+                var picker = document.getElementById('%s');
+                if(txt && picker) {
+                  txt.addEventListener('input', function(e) {
+                      if(/^#[0-9A-Fa-f]{6}$/i.test(e.target.value)) {
+                          picker.value = e.target.value;
+                      }
+                  });
+                }
+              }, 100);
+            ", ns(text_id), ns(picker_id))))
+          ),
+          column(2, actionButton(ns(apply_id), "Apply", style="padding:4px 8px; font-size:12px; margin-top:2px;"))
+        )
       })
       
       if (length(lvls) > 20) {
-        div(style="max-height: 400px; overflow-y: auto; padding: 5px;",
-            p(paste("Showing", length(lvls), "color pickers (scroll to see all)")),
+        div(style="max-height: 400px; overflow-y: auto; padding: 5px; overflow-x: hidden;",
+            p(paste("Showing", length(lvls), "inputs (scroll to see all)")),
             color_pickers)
       } else {
         color_pickers
@@ -900,7 +955,14 @@ server <- function(input, output, session) {
     if (length(lvls) > 50) return(p("Too many levels for manual colors"))
     
     lapply(lvls, function(l) {
-      colourInput(paste0("hm_col_", l), paste("Color", l), value = "#808080")
+      safe_l <- make.names(l)
+      fluidRow(
+        style = "margin-bottom: 5px; align-items: center; display: flex;",
+        column(4, tags$strong(paste("Color", l))),
+        column(3, tags$input(type="color", id=paste0("hm_col_picker_", safe_l), value="#808080", 
+                             style="width:100%; height:34px; border:1px solid #ccc; padding:0; cursor:pointer;")),
+        column(5, textInput(paste0("hm_col_text_", safe_l), label = NULL, value = "", placeholder = "#FF0000"))
+      )
     })
   })
   
@@ -974,8 +1036,17 @@ server <- function(input, output, session) {
           if (!is.null(anno_cols)) names(anno_cols) <- lvls
         } else if (anno_source == "Manual") {
           anno_cols <- sapply(lvls, function(l) {
-            c <- input[[paste0("hm_col_", l)]]
-            if(is.null(c)) "#808080" else c
+            safe_l <- make.names(l)
+            col_text <- input[[paste0("hm_col_text_", safe_l)]]
+            col_picker <- input[[paste0("hm_col_picker_", safe_l)]]
+            
+            if (!is.null(col_text) && trimws(col_text) != "") {
+              trimws(col_text)
+            } else if (!is.null(col_picker)) {
+              col_picker
+            } else {
+              "#808080"
+            }
           })
           names(anno_cols) <- lvls
         }
@@ -1005,6 +1076,12 @@ server <- function(input, output, session) {
           # 4. Apply expression color palette
           if (pal %in% names(option_map)) {
             p <- p + scale_fill_viridis(option = option_map[[pal]], name = legend_title)
+          } else if (pal %in% c("RdBu", "RdYlBu", "RdYlGn", "Spectral")) {
+            p <- p + scale_fill_gradient2(
+              low = rev(RColorBrewer::brewer.pal(n = 11, name = pal))[1], 
+              mid = "white", 
+              high = rev(RColorBrewer::brewer.pal(n = 11, name = pal))[11], 
+              midpoint = 0, name = legend_title)
           } else {
             p <- p + scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 11, name = pal)), name = legend_title)
           }

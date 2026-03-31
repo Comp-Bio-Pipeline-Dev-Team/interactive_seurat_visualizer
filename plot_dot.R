@@ -184,9 +184,14 @@ plot_dot <- function(obj,
     )
   
   # Apply color scale
-  if (!is.null(colors) && length(colors) >= 2) {
-    p <- p + ggplot2::scale_color_gradient(low = colors[1], high = colors[length(colors)],
-                                           name = legend_title)
+  if (!is.null(colors)) {
+    if (length(colors) == 3) {
+      p <- p + ggplot2::scale_color_gradient2(low = colors[1], mid = colors[2], high = colors[3],
+                                              midpoint = 0, name = legend_title)
+    } else if (length(colors) >= 2) {
+      p <- p + ggplot2::scale_color_gradient(low = colors[1], high = colors[length(colors)],
+                                             name = legend_title)
+    }
   } else {
     # Default: blue (low) to red (high)
     p <- p + ggplot2::scale_color_gradient(low = "blue", high = "red",

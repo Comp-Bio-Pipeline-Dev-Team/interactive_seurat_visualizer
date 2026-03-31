@@ -164,8 +164,13 @@ plot_feature <- function(obj,
       )
     
     # Apply color scale
-    if (!is.null(colors) && length(colors) >= 2) {
-      p <- p + ggplot2::scale_color_gradient(low = colors[1], high = colors[length(colors)])
+    if (!is.null(colors)) {
+      if (length(colors) == 3) {
+        # Diverging scale (low, mid, high)
+        p <- p + ggplot2::scale_color_gradient2(low = colors[1], mid = colors[2], high = colors[3], midpoint = 0)
+      } else if (length(colors) >= 2) {
+        p <- p + ggplot2::scale_color_gradient(low = colors[1], high = colors[length(colors)])
+      }
     } else {
       p <- p + ggplot2::scale_color_viridis_c(option = "viridis")
     }
@@ -204,8 +209,13 @@ plot_feature <- function(obj,
       )
     
     # Apply color scale
-    if (!is.null(colors) && length(colors) >= 2) {
-      p <- p + ggplot2::scale_color_gradient(low = colors[1], high = colors[length(colors)])
+    if (!is.null(colors)) {
+      if (length(colors) == 3) {
+        # Diverging scale (low, mid, high)
+        p <- p + ggplot2::scale_color_gradient2(low = colors[1], mid = colors[2], high = colors[3], midpoint = 0)
+      } else if (length(colors) >= 2) {
+        p <- p + ggplot2::scale_color_gradient(low = colors[1], high = colors[length(colors)])
+      }
     } else {
       p <- p + ggplot2::scale_color_viridis_c(option = "viridis")
     }

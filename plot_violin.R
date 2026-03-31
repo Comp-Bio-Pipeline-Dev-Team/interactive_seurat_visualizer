@@ -25,11 +25,7 @@
 #'   Default: NULL (uses active identity)
 #'   Must exist in obj@meta.data if specified
 #'   
-#' @param split_by Character string specifying metadata column for splitting violins
-#'   Data type: character (length 1) or NULL
-#'   Default: NULL (no splitting)
-#'   Must exist in obj@meta.data if specified
-#'   
+
 #' @param assay Character string specifying which assay to use
 #'   Data type: character (length 1)
 #'   Default: "RNA"
@@ -82,7 +78,6 @@
 plot_violin <- function(obj,
                        features,
                        group_by = NULL,
-                       split_by = NULL,
                        assay = "RNA",
                        layer = "data",
                        colors = NULL,
@@ -137,36 +132,19 @@ plot_violin <- function(obj,
       feature = feat
     )
     
-    # Add split variable if specified
-    if (!is.null(split_by)) {
-      if (!split_by %in% colnames(obj@meta.data)) {
-        stop(paste("split_by column", split_by, "not found in metadata"))
-      }
-      df$split <- obj@meta.data[[split_by]]
-    }
-    
+
     return(df)
   })
   
   plot_df <- do.call(rbind, plot_list)
   
   # Create base plot
-  if (is.null(split_by)) {
-    p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = group, y = expression, fill = group)) +
-      ggplot2::geom_violin(trim = FALSE, scale = "width", alpha = 0.7)
-  } else {
-    p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = group, y = expression, fill = split)) +
-      ggplot2::geom_violin(trim = FALSE, scale = "width", alpha = 0.7, position = ggplot2::position_dodge(0.9))
-  }
+  p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = group, y = expression, fill = group)) +
+    ggplot2::geom_violin(trim = FALSE, scale = "width", alpha = 0.7)
   
   # Add points if requested
   if (pt_size > 0) {
-    if (is.null(split_by)) {
-      p <- p + ggplot2::geom_jitter(height = 0, width = 0.2, size = pt_size, alpha = 0.3)
-    } else {
-      p <- p + ggplot2::geom_jitter(height = 0, width = 0.2, size = pt_size, alpha = 0.3,
-                                    position = ggplot2::position_jitterdodge(jitter.width = 0.2, dodge.width = 0.9))
-    }
+    p <- p + ggplot2::geom_jitter(height = 0, width = 0.2, size = pt_size, alpha = 0.3)
   }
   
   # Add theme and labels
@@ -174,7 +152,7 @@ plot_violin <- function(obj,
     ggplot2::labs(
       x = if (is.null(group_by)) "Identity" else group_by,
       y = "Expression",
-      fill = if (is.null(split_by)) (if (is.null(group_by)) "Identity" else group_by) else split_by
+      fill = if (is.null(group_by)) "Identity" else group_by
     ) +
     ggplot2::theme_classic() +
     ggplot2::theme(
@@ -257,16 +235,10 @@ validate_violin_plot_params <- function(input, ns, obj) {
     group_by <- NULL
   }
   
-  split_by <- input[[ns("split_by")]]
-  if (!is.null(split_by) && split_by %in% c("None", "")) {
-    split_by <- NULL
-  }
-  
   # Return validated parameters
   return(list(
     features = features,
     group_by = group_by,
-    split_by = split_by,
     assay = assay,
     layer = layer,
     pt_size = input[[ns("pt_size")]],
