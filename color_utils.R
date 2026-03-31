@@ -12,10 +12,11 @@
 #' @param n_colors Number of colors needed
 #' @param named Logical, whether to return a named vector
 #' @param level_names Character vector of level names for naming colors
+#' @param reverse Logical, whether to reverse the palette order
 #'
 #' @return Character vector of hex colors
 #' @export
-get_palette_colors <- function(palette_name, n_colors, named = FALSE, level_names = NULL) {
+get_palette_colors <- function(palette_name, n_colors, named = FALSE, level_names = NULL, reverse = FALSE) {
   if (n_colors == 0) return(NULL)
   
   colors <- NULL
@@ -51,6 +52,11 @@ get_palette_colors <- function(palette_name, n_colors, named = FALSE, level_name
   if (is.null(colors)) {
     warning(paste("Palette", palette_name, "not found. Returning NULL."))
     return(NULL)
+  }
+  
+  # Reverse palette if requested
+  if (reverse) {
+    colors <- rev(colors)
   }
   
   # Add names if requested
@@ -166,7 +172,8 @@ get_plot_colors <- function(input, ns, levels, named = FALSE) {
     palette_name <- input[[ns("palette_name")]]
     if (is.null(palette_name)) return(NULL)
     
-    return(get_palette_colors(palette_name, n_colors, named = named, level_names = levels))
+    reverse <- isTRUE(input[[ns("reverse_palette")]])
+    return(get_palette_colors(palette_name, n_colors, named = named, level_names = levels, reverse = reverse))
   }
   
   # Manual colors

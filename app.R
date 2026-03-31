@@ -76,7 +76,8 @@ plotControlUI <- function(id) {
                          "Diverging" = c("RdBu", "RdYlBu", "RdYlGn", "Spectral"),
                          "Discrete" = c("Set1", "Set2", "Set3", "Dark2", "Paired", "Pastel1", "Pastel2", "Accent"),
                          "MetBrewer" = names(MetBrewer::MetPalettes)
-                       ))
+                       )),
+            checkboxInput(ns("reverse_palette"), "Reverse Palette Order", value = FALSE)
           ),
           conditionalPanel(
             condition = sprintf("input['%s'] == 'Manual'", ns("color_source")),
@@ -101,8 +102,10 @@ plotControlUI <- function(id) {
           ),
           textInput(ns("xlab"), "X-axis Label (optional)", value = ""),
           textInput(ns("ylab"), "Y-axis Label (optional)", value = ""),
-          sliderInput(ns("axis_text_size"), "Axis Text Size", 
-                     min = 8, max = 20, value = 12, step = 1)
+          fluidRow(
+            column(6, numericInput(ns("axis_title_size"), "Axis Title Size", value = 14, min = 8, max = 30)),
+            column(6, sliderInput(ns("axis_text_size"), "Axis Text Tick Size", min = 8, max = 20, value = 10, step = 1))
+          )
         )
       )
     )
@@ -618,21 +621,6 @@ server <- function(input, output, session) {
       # FeaturePlot module
       params <- validate_feature_plot_params(input, ns, obj)
       if (!is.null(params)) {
-        # For continuous scales, use first/last (or middle for diverging)
-        feat_colors <- if(!is.null(colors) && length(colors) >= 2) {
-          is_diverging <- !is.null(input[[ns("color_source")]]) && 
-                          input[[ns("color_source")]] == "Palette" &&
-                          !is.null(input[[ns("palette_name")]]) &&
-                          input[[ns("palette_name")]] %in% c("RdBu", "RdYlBu", "RdYlGn", "Spectral")
-          
-          if (is_diverging && length(colors) >= 3) {
-            c(colors[1], "#FFFFFF", colors[length(colors)])
-          } else {
-            c(colors[1], colors[length(colors)])
-          }
-        } else {
-          NULL
-        }
         
         p <- plot_feature(
           obj = obj,
@@ -641,7 +629,7 @@ server <- function(input, output, session) {
           split_by = params$split_by,
           assay = assay,
           layer = layer,
-          colors = feat_colors,
+          colors = colors,
           pt_size = pt_size,
           title = if(isTruthy(title)) title else NULL,
           show_legend = show_legend
@@ -717,6 +705,7 @@ server <- function(input, output, session) {
       xlab_custom <- input[[ns("xlab")]]
       ylab_custom <- input[[ns("ylab")]]
       axis_size <- input[[ns("axis_text_size")]]
+      axis_title_sz <- input[[ns("axis_title_size")]]
       
       if (!is.null(xlab_custom) && nchar(xlab_custom) > 0) {
         p <- p + ggplot2::labs(x = xlab_custom)
@@ -729,6 +718,13 @@ server <- function(input, output, session) {
           axis.text = ggplot2::element_text(size = axis_size),
           axis.text.x = ggplot2::element_text(size = axis_size),
           axis.text.y = ggplot2::element_text(size = axis_size)
+        )
+      }
+      if (!is.null(axis_title_sz)) {
+        p <- p + ggplot2::theme(
+          axis.title = ggplot2::element_text(size = axis_title_sz, face = "bold"),
+          axis.title.x = ggplot2::element_text(size = axis_title_sz, face = "bold"),
+          axis.title.y = ggplot2::element_text(size = axis_title_sz, face = "bold")
         )
       }
     }
