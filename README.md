@@ -22,10 +22,10 @@ The app runs in Docker, with all R packages version controlled  via `renv.lock` 
 
 ```bash
 # 1. Download image from DockerHub
-sudo docker pull tbrunetti/interactive_seuart_visualizer:dev_03302026
+sudo docker pull tbrunetti/interactive_seuart_visualizer:LG_03312026
 
 # 2. Run the container on the command line
-sudo docker run -d -p 3838:3838 tbrunetti/interactive_seuart_visualizer:dev_03302026
+sudo docker run -d -p 3838:3838 tbrunetti/interactive_seuart_visualizer:LG_03312026
 
 # 3. Access the app by opening your favorite web browser and going to the following link
 http://localhost:3838 **or** http://0.0.0.0:3838
